@@ -1,0 +1,25 @@
+name: Feature request
+description: Propose new functionality or an enhancement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to accomplish? Why does it matter?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: What should the change do? Sketch the CLI/flags/behaviour if relevant.
+    validations:
+      required: false
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope notes
+      description: Canada-specific, or generally applicable? Any out-of-scope boundaries?
+    validations:
+      required: false

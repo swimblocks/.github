@@ -1,0 +1,53 @@
+name: reusable-python-ci
+
+# Shared Python CI for SwimBlocks repos. Call it from a repo's own ci.yml:
+#
+#   jobs:
+#     ci:
+#       uses: swimblocks/.github/.github/workflows/reusable-python-ci.yml@main
+#
+# Optionally override inputs:
+#   with:
+#     python-version: "3.12"
+#     requirements-file: requirements-dev.txt
+#     run-lint: true
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: Python version to test against
+        type: string
+        default: "3.12"
+      requirements-file:
+        description: Requirements file to install
+        type: string
+        default: requirements-dev.txt
+      run-lint:
+        description: Whether to run `ruff check .`
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r ${{ inputs.requirements-file }}
+
+      - name: Lint (ruff)
+        if: ${{ inputs.run-lint }}
+        run: ruff check .
+
+      - name: Tests (pytest)
+        run: pytest -q
