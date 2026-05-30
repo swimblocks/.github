@@ -89,6 +89,71 @@ def verify(repo: str, repo_block: dict) -> bool:
     return ok
 
 
+# Top-level keys of the branch protection PUT body. Anything not in this set is
+# rejected by the API, so we filter `protection:` in the YAML down to these.
+PROTECTION_KEYS = {
+    "required_status_checks", "enforce_admins", "required_pull_request_reviews",
+    "restrictions", "required_linear_history", "allow_force_pushes",
+    "allow_deletions", "required_conversation_resolution", "lock_branch",
+    "allow_fork_syncing", "block_creations",
+}
+
+
+def apply_branch_protection(repo: str, branch: str, protection: dict) -> None:
+    """PUT /repos/{owner}/{repo}/branches/{branch}/protection."""
+    payload = {k: v for k, v in protection.items() if k in PROTECTION_KEYS}
+    cmd = ["gh", "api", "-X", "PUT",
+           f"repos/{repo}/branches/{branch}/protection",
+           "--input", "-"]
+    subprocess.run(cmd, input=json.dumps(payload), text=True,
+                   check=True, stdout=subprocess.DEVNULL)
+
+
+def _flatten_protection(actual: dict) -> dict:
+    """The GET response wraps several fields as {enabled: bool}. Flatten so we
+    can compare against the YAML."""
+    flat: dict = {}
+    for key in PROTECTION_KEYS:
+        if key not in actual:
+            flat[key] = None
+            continue
+        val = actual[key]
+        # Boolean-enabled wrappers: {url?, enabled: bool}
+        if isinstance(val, dict) and set(val.keys()) <= {"url", "enabled"}:
+            flat[key] = val.get("enabled", False)
+        else:
+            flat[key] = val
+    return flat
+
+
+def verify_branch_protection(repo: str, branch: str, protection: dict) -> bool:
+    out = subprocess.run(
+        ["gh", "api", f"repos/{repo}/branches/{branch}/protection"],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    actual_flat = _flatten_protection(json.loads(out))
+    ok = True
+    for key, expected in protection.items():
+        if key not in PROTECTION_KEYS:
+            continue
+        got = actual_flat.get(key)
+        if isinstance(expected, dict) and isinstance(got, dict):
+            mismatch = {k: (got.get(k), v) for k, v in expected.items() if got.get(k) != v}
+            sub_ok = not mismatch
+            marker = "OK " if sub_ok else "FAIL"
+            print(f"  {marker} branches.{branch}.{key}: "
+                  f"{ {k: got.get(k) for k in expected} } (expected {expected})")
+            if not sub_ok:
+                ok = False
+        else:
+            sub_ok = got == expected
+            marker = "OK " if sub_ok else "FAIL"
+            print(f"  {marker} branches.{branch}.{key}: {got!r} (expected {expected!r})")
+            if not sub_ok:
+                ok = False
+    return ok
+
+
 def main(argv: list[str]) -> int:
     if not shutil.which("gh"):
         print("error: gh CLI not on PATH", file=sys.stderr)
@@ -100,6 +165,7 @@ def main(argv: list[str]) -> int:
     settings_path = Path(__file__).resolve().parents[1] / ".github" / "settings.yml"
     settings = load_settings(settings_path)
     repo_block = (settings.get("repository") or {})
+    branches_block = (settings.get("branches") or [])
     args = patch_args(repo_block)
 
     failures: list[str] = []
@@ -108,6 +174,28 @@ def main(argv: list[str]) -> int:
         apply(repo, args)
         if not verify(repo, repo_block):
             failures.append(repo)
+        # Branch protection (applied per branch entry — currently just `main`).
+        # Failures here are not fatal to the loop: a private repo on a Free
+        # plan, a default branch with a different name, or a tier upgrade
+        # required are all real, recoverable conditions we want to surface
+        # without abandoning the rest of the run.
+        for entry in branches_block:
+            branch = entry.get("name")
+            protection = entry.get("protection") or {}
+            if not branch or not protection:
+                continue
+            try:
+                apply_branch_protection(repo, branch, protection)
+            except subprocess.CalledProcessError as e:
+                print(f"  SKIP branches.{branch}: PUT failed (exit {e.returncode}). "
+                      f"Likely cause: private repo on a plan without branch "
+                      f"protection, or the branch doesn't exist yet.")
+                if repo not in failures:
+                    failures.append(repo)
+                continue
+            if not verify_branch_protection(repo, branch, protection):
+                if repo not in failures:
+                    failures.append(repo)
     if failures:
         print(f"\nFAIL: drift remains on {', '.join(failures)}", file=sys.stderr)
         return 1

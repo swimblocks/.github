@@ -15,9 +15,13 @@ Organization-wide defaults for [SwimBlocks](https://github.com/swimblocks).
 - [`.github/workflows/reconcile-repo-defaults.yml`](.github/workflows/reconcile-repo-defaults.yml)
   — applies `settings.yml` across the org on schedule / dispatch / new-repo events
 - [`scripts/create-repo.sh`](scripts/create-repo.sh) — **the** way to create a new SwimBlocks
-  repo (calls `gh repo create` and immediately aligns settings)
+  repo (defaults to private; aligns settings immediately)
+- [`scripts/make-public.sh`](scripts/make-public.sh) — **the** way to promote a private repo
+  to public (runs pre-public checks: secret scans of tree + history, required-files audit,
+  then flips visibility and applies branch protection). This is the documented home for any
+  pre-public step we learn we need.
 - [`scripts/apply-settings.py`](scripts/apply-settings.py) — applies `settings.yml` to a given
-  repo; used by the reconciler workflow and `create-repo.sh`
+  repo; used by the reconciler workflow, `create-repo.sh`, and `make-public.sh`
 
 GitHub automatically applies the community-health files above to any repo in the org that
 doesn't define its own. Reusable workflows are referenced explicitly via

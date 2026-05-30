@@ -83,14 +83,32 @@ of truth**; the table below is a human-readable summary.
 | `delete_branch_on_merge` | `true` | Branch deleted automatically after merge. |
 | `allow_update_branch` | `true` | "Update branch" button enabled on PRs. |
 
+### Branch protection (same source of truth)
+
+`settings.yml` also carries a `branches:` section that the reconciler applies to every repo's
+default branch via `PUT /repos/.../branches/main/protection`. Today that's:
+
+- Pull request required (1 approving review, code-owner review required, stale reviews
+  dismissed on new pushes).
+- Linear history required (i.e. squash-only — pairs with the merge-method settings above).
+- No force pushes, no deletions, no unresolved conversations at merge time.
+- `enforce_admins: false` — the admin (you) keeps an override so a single-admin org doesn't
+  deadlock approving its own PRs. Tighten this once another code owner exists.
+
+> **Private-repo caveat:** GitHub Free does not allow branch protection on private repositories.
+> The reconciler will skip and report this as a known limitation; the repo remains aligned on
+> all the merge-method fields. Either upgrade the plan or flip the repo to public to enable
+> protection.
+
 ### How it's enforced
 
 - **`.github/workflows/reconcile-repo-defaults.yml`** — a scheduled Actions workflow that runs
   weekly, on `workflow_dispatch`, and on a `repo-created` `repository_dispatch` event. It reads
   `settings.yml` and PATCHes any drift on every repo in the org. (Requires a repo secret
   `SWIMBLOCKS_ADMIN_TOKEN` with admin rights on org repos.)
-- **[`CODEOWNERS`](CODEOWNERS)** + branch protection on `main` — `settings.yml` and the
-  reconciler workflow can only change via a PR that the designated admin reviews.
+- **[`CODEOWNERS`](CODEOWNERS)** + branch protection on `main` (now also in `settings.yml`) —
+  `settings.yml` and the reconciler workflow can only change via a PR that the designated
+  admin reviews.
 
 ### Creating a new repo
 
@@ -100,10 +118,39 @@ of truth**; the table below is a human-readable summary.
 scripts/create-repo.sh <repo-name> --description "Short About line"
 ```
 
-That calls `gh repo create swimblocks/<repo-name>` and then `scripts/apply-settings.py
-swimblocks/<repo-name>` to align settings with `settings.yml`. Add the repo to the
-[org profile README](profile/README.md), enable branch protection on `main`, and
-file an issue against the new repo to add CI / Dependabot / a per-repo `AGENTS.md`.
+The script **defaults to `--private`** because SwimBlocks repos usually start that way and
+graduate to public later. While the repo is private, branch protection won't be applied
+(GitHub Free disallows it on private repos); the reconciler will report this as a SKIP, which
+is the expected steady state until you promote the repo.
+
+After creation, add the new repo to the [org profile README](profile/README.md) and file
+issues against it to add CI (calling the shared reusable workflow), `.github/dependabot.yml`,
+and a per-repo `AGENTS.md`.
+
+### Promoting a repo to public
+
+When a repo is ready to release, **always use** [`scripts/make-public.sh`](scripts/make-public.sh)
+— never the GitHub UI:
+
+```bash
+scripts/make-public.sh swimblocks/<repo-name>
+```
+
+That script is the canonical place where we accumulate pre-public checks. Currently it:
+
+1. Confirms the repo is currently private.
+2. Clones the repo and scans the **working tree** for secret-shaped strings (AWS keys, PEM
+   private keys, GitHub PATs, Google OAuth client secrets, Slack tokens, embedded URL
+   credentials, `api_key=...` etc.).
+3. Scans the **git history** for the same (skip with `--skip-history` at your own risk).
+4. Warns if `LICENSE` or `README.md` is missing.
+5. Asks for typed confirmation.
+6. Flips visibility via `gh repo edit --visibility public`.
+7. Polls until GitHub releases the visibility-flip lock.
+8. Re-runs `apply-settings.py`, which now installs branch protection.
+
+**When we learn something new is required before a repo can safely go public, that check goes
+into `make-public.sh`** rather than being remembered. Treat the script as a living checklist.
 
 ### Re-aligning an existing repo
 
