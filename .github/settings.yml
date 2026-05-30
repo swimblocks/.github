@@ -24,15 +24,12 @@ repository:
   delete_branch_on_merge: true
   allow_update_branch: true
 
-# Branch protection applied to the default branch of every repo. Maps to
-# PUT /repos/{owner}/{repo}/branches/{name}/protection.
+# Branch protection for public repos is handled via GitHub Rulesets (see `rulesets:` below),
+# which support bypass actors so org owners and repo admins can force-push without extra steps
+# — just `git push origin main --force`. GitHub records the bypass in the audit log.
 #
-# `enforce_admins: false` is deliberate: with a single admin/code-owner you
-# would otherwise deadlock on your own PRs. Admins can bypass; the rules
-# apply to everyone else (and to agents).
-#
-# `require_code_owner_reviews: true` is a no-op on repos that don't have a
-# CODEOWNERS file — harmless. It enforces real review on swimblocks/.github.
+# Legacy branch protection (this `branches:` block) is still attempted for private repos
+# but is expected to fail on GitHub Free; the reconciler skips it gracefully.
 branches:
   - name: main
     protection:
@@ -47,3 +44,35 @@ branches:
       allow_force_pushes: false
       allow_deletions: false
       required_conversation_resolution: true
+
+# Rulesets for public repos. GitHub Free supports repository-level rulesets on public repos.
+# apply-settings.py creates/updates these and removes the legacy branch protection when the
+# repo is public. See https://github.com/swimblocks/.github/issues/11
+rulesets:
+  - name: swimblocks-default
+    target: branch
+    enforcement: active
+    bypass_actors:
+      # Org owners and repo admins bypass all rules — break-glass for history rewrites etc.
+      # No extra steps: just `git push origin main --force`. Recorded in the audit log.
+      - actor_id: 1
+        actor_type: OrganizationAdmin
+        bypass_mode: always
+      - actor_id: 5           # Admin (built-in repository role ID)
+        actor_type: RepositoryRole
+        bypass_mode: always
+    conditions:
+      ref_name:
+        include: ["~DEFAULT_BRANCH"]
+        exclude: []
+    rules:
+      - type: deletion
+      - type: non_fast_forward        # prevents force push for non-admins
+      - type: required_linear_history
+      - type: pull_request
+        parameters:
+          required_approving_review_count: 1
+          require_code_owner_review: true
+          dismiss_stale_reviews_on_push: true
+          require_last_push_approval: false
+          required_review_thread_resolution: true
