@@ -17,6 +17,11 @@ explicitly overrides it.
 - **Docs travel with code.** User-facing changes update the README / docs in the same PR.
   New code carries clear docstrings.
 - **Simplicity.** If a change adds complexity, consider refactoring for clarity instead.
+- **Capture review-derived rules here.** When a code review (or any maintainer conversation)
+  yields a generalizable rule about how SwimBlocks repos should be developed, fold it into
+  this file via a PR closing a tracking issue. A verbal "I'll remember" doesn't bind future
+  contributors — agents especially. The rules below grew this way; new ones should land the
+  same way.
 
 ## Workflow: issue → branch → PR → squash-merge
 
@@ -35,8 +40,36 @@ explicitly overrides it.
    deletes the branch. The squash commit message should carry the meaningful detail, not just
    the PR title.
 
+### Solo-admin merge path
+
+Until a second code owner exists, the author satisfying `require_code_owner_reviews` on their
+own PR is mathematically impossible (GitHub blocks self-approval). Two options, both relying
+on `enforce_admins: false` in [`settings.yml`](.github/settings.yml):
+
+- **Web UI:** on the PR page, scroll past the standard "Squash and merge" button to the
+  "Merge without waiting for requirements to be met (bypass branch protections)" link, and
+  confirm.
+- **CLI:** `gh pr merge <N> --repo swimblocks/<repo> --admin --squash --delete-branch`.
+
+This is the deliberate steady state for a single-admin org. Revisit when a second code owner
+joins.
+
 Direct pushes to `main` are discouraged; go through a PR. Never use `--no-verify` or bypass
 signing. Create new commits rather than amending already-pushed ones.
+
+### Code comments
+
+- **TODO / aspirational comments must link to a GitHub issue.** A comment that says "out of
+  scope for now" or "should add X later" is just a wish; the next reader (human or agent)
+  has no way to act on it. Open a tracking issue and reference it inline:
+
+  ```python
+  # See https://github.com/swimblocks/<repo>/issues/42 for the proper solution;
+  # the regex below is the cheap stopgap.
+  ```
+
+  Same rule for shell, YAML, etc. If you don't have an issue number yet, file one before the
+  PR lands. Reviewers will (and have!) push back on bare TODOs.
 
 ## Quality gates
 

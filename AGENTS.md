@@ -57,35 +57,43 @@ For **every** change:
 Do not push directly to `main`. Do not use `--no-verify` or otherwise skip hooks. Create new
 commits rather than amending already-pushed ones.
 
-## 4. Quality gates (Python repos)
+## 4. Code comments
+
+- **Aspirational / TODO comments must link to a GitHub issue.** A note that says "out of
+  scope" or "should add X later" is just a wish. File an issue and reference it inline:
+  `# See https://github.com/swimblocks/<repo>/issues/N — the cheap stopgap below covers …`.
+  Reviewers will push back on bare TODOs. Full rationale in
+  [CONTRIBUTING.md](CONTRIBUTING.md#code-comments).
+
+## 5. Quality gates (Python repos)
 
 - Lint: `ruff check .` (config in each repo's `pyproject.toml`). Auto-fix with `--fix`.
 - Tests: `pytest -q`. Add coverage for new behaviour and regressions.
 - CI: each repo's `ci.yml` calls
   [`swimblocks/.github/.github/workflows/reusable-python-ci.yml@main`](.github/workflows/reusable-python-ci.yml).
 
-## 5. Dependencies
+## 6. Dependencies
 
 - `requirements.txt`: direct runtime + test deps only, UTF-8, `>=` minimums. No full `pip
   freeze` output, no transitive pins.
 - `requirements-dev.txt`: layered on top, adds dev-only tools (e.g. `ruff`).
 - Dependabot config lives **per repo** at `.github/dependabot.yml` (no org-wide inheritance).
 
-## 6. Secrets, data, and PII
+## 7. Secrets, data, and PII
 
 - Never commit `.env`, credentials, or service-account keys (all gitignored).
 - Never commit personal data — officials' names/emails, club contact lists, REMS exports.
   Treat such CSV/PDF as local sample data and gitignore it, or scrub before commit.
 - Report any exposure privately via the repo's Security tab, not a public issue.
 
-## 7. Creating a new repo
+## 8. Creating a new repo
 
 Use [`scripts/create-repo.sh`](scripts/create-repo.sh) — **never** the GitHub UI. It applies
 the canonical settings from [`.github/settings.yml`](.github/settings.yml) automatically.
 Drift on existing repos is healed by the scheduled
 [`reconcile-repo-defaults.yml`](.github/workflows/reconcile-repo-defaults.yml) workflow.
 
-## 8. Other agent-specific files
+## 9. Other agent-specific files
 
 Each repo carries thin pointer files so any tool finds the right context:
 
@@ -95,7 +103,7 @@ Each repo carries thin pointer files so any tool finds the right context:
 
 Edit `AGENTS.md`. The pointer files don't need changes.
 
-## 9. When in doubt
+## 10. When in doubt
 
 - **Don't widen scope.** If an issue says "fix X," fix X. Don't refactor unrelated code.
 - **Don't generalise away the Canada specifics.** They are load-bearing.
