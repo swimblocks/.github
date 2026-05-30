@@ -12,5 +12,6 @@
 /.github/workflows/reconcile-repo-defaults.yml     @gavinbee
 /scripts/apply-settings.py                         @gavinbee
 /scripts/create-repo.sh                            @gavinbee
+/scripts/make-public.sh                            @gavinbee
 /CONTRIBUTING.md                                   @gavinbee
 /AGENTS.md                                         @gavinbee
