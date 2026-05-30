@@ -78,7 +78,14 @@ commits rather than amending already-pushed ones.
   Treat such CSV/PDF as local sample data and gitignore it, or scrub before commit.
 - Report any exposure privately via the repo's Security tab, not a public issue.
 
-## 7. Other agent-specific files
+## 7. Creating a new repo
+
+Use [`scripts/create-repo.sh`](scripts/create-repo.sh) — **never** the GitHub UI. It applies
+the canonical settings from [`.github/settings.yml`](.github/settings.yml) automatically.
+Drift on existing repos is healed by the scheduled
+[`reconcile-repo-defaults.yml`](.github/workflows/reconcile-repo-defaults.yml) workflow.
+
+## 8. Other agent-specific files
 
 Each repo carries thin pointer files so any tool finds the right context:
 
@@ -88,7 +95,7 @@ Each repo carries thin pointer files so any tool finds the right context:
 
 Edit `AGENTS.md`. The pointer files don't need changes.
 
-## 8. When in doubt
+## 9. When in doubt
 
 - **Don't widen scope.** If an issue says "fix X," fix X. Don't refactor unrelated code.
 - **Don't generalise away the Canada specifics.** They are load-bearing.

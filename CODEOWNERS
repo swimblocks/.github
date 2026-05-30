@@ -1,0 +1,16 @@
+# Code owners for swimblocks/.github
+#
+# Changes to org-wide policy require admin review. Branch protection on `main`
+# enforces this via "Require review from Code Owners".
+
+# Default: anything in this repo
+*                                                  @gavinbee
+
+# Belt and braces — explicitly list the policy-bearing files so a CODEOWNERS
+# typo never bypasses the review gate on them.
+/.github/settings.yml                              @gavinbee
+/.github/workflows/reconcile-repo-defaults.yml     @gavinbee
+/scripts/apply-settings.py                         @gavinbee
+/scripts/create-repo.sh                            @gavinbee
+/CONTRIBUTING.md                                   @gavinbee
+/AGENTS.md                                         @gavinbee

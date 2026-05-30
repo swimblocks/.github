@@ -1,0 +1,46 @@
+name: reconcile-repo-defaults
+
+# Reconciles every repo in the swimblocks org against `.github/settings.yml`,
+# the org-wide source of truth. Runs:
+#   - Weekly (catches drift / settings reverted via the GitHub UI)
+#   - On demand via the Actions tab (workflow_dispatch)
+#   - When a repository_dispatch event of type `repo-created` is sent (e.g.
+#     by an org-level webhook on `repository.created`)
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC
+  workflow_dispatch:
+  repository_dispatch:
+    types: [repo-created]
+
+permissions: {}
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install PyYAML
+        run: pip install --quiet PyYAML
+
+      - name: Apply settings to every repo in swimblocks
+        env:
+          # PAT (or fine-grained token) with `repo` admin scope on the org.
+          # Stored as a repository secret on swimblocks/.github.
+          GH_TOKEN: ${{ secrets.SWIMBLOCKS_ADMIN_TOKEN }}
+        run: |
+          set -euo pipefail
+          repos=$(gh repo list swimblocks --limit 200 --json nameWithOwner --jq '.[].nameWithOwner')
+          if [ -z "$repos" ]; then
+            echo "No repos found — token may lack visibility into the org."
+            exit 1
+          fi
+          # shellcheck disable=SC2086
+          python scripts/apply-settings.py $repos
