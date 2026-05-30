@@ -1,0 +1,25 @@
+# SwimBlocks org-wide repo defaults — single source of truth.
+#
+# Applied by `scripts/apply-settings.py` (called from
+# `.github/workflows/reconcile-repo-defaults.yml` on a schedule and on demand,
+# and from `scripts/create-repo.sh` when a new repo is created).
+#
+# Format follows the Probot "Settings" app YAML shape, so this file is
+# drop-in compatible if we ever adopt a hosted reconciler. Keys we don't
+# act on yet are documented so they can be turned on later without changing
+# the source of truth.
+
+repository:
+  # Merge methods: squash-only.
+  allow_squash_merge: true
+  allow_merge_commit: false
+  allow_rebase_merge: false
+
+  # Use the PR title and body verbatim as the squash commit subject + body.
+  # (The PR body is required to be substantive — see CONTRIBUTING.md.)
+  squash_merge_commit_title: PR_TITLE
+  squash_merge_commit_message: PR_BODY
+
+  # Quality-of-life defaults that pair naturally with the squash-only flow.
+  delete_branch_on_merge: true
+  allow_update_branch: true

@@ -67,6 +67,49 @@ signing. Create new commits rather than amending already-pushed ones.
 - Never commit real personal data (officials' names/emails, club contact lists). Treat any
   such CSV/PDF as local sample data and gitignore it, or scrub before committing.
 
+## Repo settings (org-wide policy)
+
+Every SwimBlocks repo's GitHub settings are governed by
+[`.github/settings.yml`](.github/settings.yml) in this repo. That file is the **single source
+of truth**; the table below is a human-readable summary.
+
+| Setting | Value | Why |
+|---|---|---|
+| `allow_squash_merge` | `true` | Squash is the only allowed merge method. |
+| `allow_merge_commit` | `false` | No merge commits — keeps main linear. |
+| `allow_rebase_merge` | `false` | No rebase merges either. |
+| `squash_merge_commit_title` | `PR_TITLE` | Squash commit subject = PR title. |
+| `squash_merge_commit_message` | `PR_BODY` | Squash commit body = PR description (so the body must be substantive). |
+| `delete_branch_on_merge` | `true` | Branch deleted automatically after merge. |
+| `allow_update_branch` | `true` | "Update branch" button enabled on PRs. |
+
+### How it's enforced
+
+- **`.github/workflows/reconcile-repo-defaults.yml`** — a scheduled Actions workflow that runs
+  weekly, on `workflow_dispatch`, and on a `repo-created` `repository_dispatch` event. It reads
+  `settings.yml` and PATCHes any drift on every repo in the org. (Requires a repo secret
+  `SWIMBLOCKS_ADMIN_TOKEN` with admin rights on org repos.)
+- **[`CODEOWNERS`](CODEOWNERS)** + branch protection on `main` — `settings.yml` and the
+  reconciler workflow can only change via a PR that the designated admin reviews.
+
+### Creating a new repo
+
+**Always use the helper, not the GitHub UI**, so the new repo inherits the canonical settings:
+
+```bash
+scripts/create-repo.sh <repo-name> --description "Short About line"
+```
+
+That calls `gh repo create swimblocks/<repo-name>` and then `scripts/apply-settings.py
+swimblocks/<repo-name>` to align settings with `settings.yml`. Add the repo to the
+[org profile README](profile/README.md), enable branch protection on `main`, and
+file an issue against the new repo to add CI / Dependabot / a per-repo `AGENTS.md`.
+
+### Re-aligning an existing repo
+
+If a repo's settings have drifted (or someone clicked through the GitHub UI), wait for the
+next scheduled reconciler run, or trigger it manually from the Actions tab on `swimblocks/.github`.
+
 ## Project scope
 
 SwimBlocks tools target **Swimming Canada's ecosystem and Canadian provincial associations**.
