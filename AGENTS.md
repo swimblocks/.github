@@ -18,6 +18,9 @@ others are Canada-default but architecturally extensible (e.g. `deck-eval-parser
 
 ## 2. Bootstrapping (humans + agents)
 
+> **Setting up a new machine?** See [`docs/development.md`](docs/development.md) for
+> the recommended ghq layout and the install script for user-local agent pointer files.
+
 If you've just cloned a SwimBlocks repo for the first time:
 
 ```bash
