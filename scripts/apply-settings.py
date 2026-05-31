@@ -99,6 +99,58 @@ PROTECTION_KEYS = {
 }
 
 
+def get_repo_visibility(repo: str) -> str:
+    """Return 'public' or 'private' for the repo."""
+    out = subprocess.run(
+        ["gh", "api", f"repos/{repo}", "--jq", ".visibility"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip().lower()
+    return out
+
+
+def list_rulesets(repo: str) -> list[dict]:
+    out = subprocess.run(
+        ["gh", "api", f"repos/{repo}/rulesets"],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    return json.loads(out)
+
+
+def apply_ruleset(repo: str, ruleset: dict) -> None:
+    """Create or update a named ruleset (idempotent by name)."""
+    existing = list_rulesets(repo)
+    match = next((r for r in existing if r["name"] == ruleset["name"]), None)
+    if match:
+        cmd = ["gh", "api", "-X", "PUT",
+               f"repos/{repo}/rulesets/{match['id']}",
+               "--input", "-"]
+    else:
+        cmd = ["gh", "api", "-X", "POST",
+               f"repos/{repo}/rulesets",
+               "--input", "-"]
+    subprocess.run(cmd, input=json.dumps(ruleset), text=True,
+                   check=True, stdout=subprocess.DEVNULL)
+
+
+def verify_ruleset(repo: str, ruleset_name: str) -> bool:
+    existing = list_rulesets(repo)
+    found = any(r["name"] == ruleset_name for r in existing)
+    marker = "OK " if found else "FAIL"
+    print(f"  {marker} ruleset '{ruleset_name}': {'present' if found else 'missing'}")
+    return found
+
+
+def delete_legacy_protection(repo: str, branch: str) -> None:
+    """Remove legacy branch protection (superseded by ruleset on public repos)."""
+    result = subprocess.run(
+        ["gh", "api", "-X", "DELETE",
+         f"repos/{repo}/branches/{branch}/protection"],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        print(f"  OK  removed legacy branch protection on '{branch}' (superseded by ruleset)")
+
+
 def apply_branch_protection(repo: str, branch: str, protection: dict) -> None:
     """PUT /repos/{owner}/{repo}/branches/{branch}/protection."""
     payload = {k: v for k, v in protection.items() if k in PROTECTION_KEYS}
@@ -168,34 +220,54 @@ def main(argv: list[str]) -> int:
     branches_block = (settings.get("branches") or [])
     args = patch_args(repo_block)
 
+    rulesets_block = settings.get("rulesets") or []
+
     failures: list[str] = []
     for repo in argv[1:]:
         print(f"=== {repo} ===")
         apply(repo, args)
         if not verify(repo, repo_block):
             failures.append(repo)
-        # Branch protection (applied per branch entry — currently just `main`).
-        # Failures here are not fatal to the loop: a private repo on a Free
-        # plan, a default branch with a different name, or a tier upgrade
-        # required are all real, recoverable conditions we want to surface
-        # without abandoning the rest of the run.
-        for entry in branches_block:
-            branch = entry.get("name")
-            protection = entry.get("protection") or {}
-            if not branch or not protection:
-                continue
-            try:
-                apply_branch_protection(repo, branch, protection)
-            except subprocess.CalledProcessError as e:
-                print(f"  SKIP branches.{branch}: PUT failed (exit {e.returncode}). "
-                      f"Likely cause: private repo on a plan without branch "
-                      f"protection, or the branch doesn't exist yet.")
-                if repo not in failures:
-                    failures.append(repo)
-                continue
-            if not verify_branch_protection(repo, branch, protection):
-                if repo not in failures:
-                    failures.append(repo)
+
+        is_public = get_repo_visibility(repo) == "public"
+
+        if is_public and rulesets_block:
+            # Public repos: rulesets with bypass actors for admin force-push break-glass.
+            # Legacy branch protection is removed so it can't silently override the ruleset.
+            for ruleset in rulesets_block:
+                try:
+                    apply_ruleset(repo, ruleset)
+                    if not verify_ruleset(repo, ruleset["name"]):
+                        if repo not in failures:
+                            failures.append(repo)
+                except subprocess.CalledProcessError as e:
+                    print(f"  SKIP ruleset '{ruleset.get('name')}': apply failed "
+                          f"(exit {e.returncode}).")
+                    if repo not in failures:
+                        failures.append(repo)
+            for entry in branches_block:
+                branch = entry.get("name")
+                if branch:
+                    delete_legacy_protection(repo, branch)
+        else:
+            # Private repos: attempt legacy branch protection (expected to fail on Free plan).
+            for entry in branches_block:
+                branch = entry.get("name")
+                protection = entry.get("protection") or {}
+                if not branch or not protection:
+                    continue
+                try:
+                    apply_branch_protection(repo, branch, protection)
+                except subprocess.CalledProcessError as e:
+                    print(f"  SKIP branches.{branch}: PUT failed (exit {e.returncode}). "
+                          f"Likely cause: private repo on a plan without branch "
+                          f"protection, or the branch doesn't exist yet.")
+                    if repo not in failures:
+                        failures.append(repo)
+                    continue
+                if not verify_branch_protection(repo, branch, protection):
+                    if repo not in failures:
+                        failures.append(repo)
     if failures:
         print(f"\nFAIL: drift remains on {', '.join(failures)}", file=sys.stderr)
         return 1
