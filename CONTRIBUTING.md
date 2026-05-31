@@ -17,6 +17,11 @@ explicitly overrides it.
 - **Docs travel with code.** User-facing changes update the README / docs in the same PR.
   New code carries clear docstrings.
 - **Simplicity.** If a change adds complexity, consider refactoring for clarity instead.
+- **Capture review-derived rules here.** When a code review (or any maintainer conversation)
+  yields a generalizable rule about how SwimBlocks repos should be developed, fold it into
+  this file via a PR closing a tracking issue. A verbal "I'll remember" doesn't bind future
+  contributors — agents especially. The rules below grew this way; new ones should land the
+  same way.
 
 ## Workflow: issue → branch → PR → squash-merge
 
@@ -35,8 +40,36 @@ explicitly overrides it.
    deletes the branch. The squash commit message should carry the meaningful detail, not just
    the PR title.
 
+### Solo-admin merge path
+
+Until a second code owner exists, the author satisfying `require_code_owner_reviews` on their
+own PR is mathematically impossible (GitHub blocks self-approval). Two options, both relying
+on admin bypass in the repo ruleset (see [`settings.yml`](.github/settings.yml)):
+
+- **Web UI:** on the PR page, scroll past the standard "Squash and merge" button to the
+  "Merge without waiting for requirements to be met (bypass branch protections)" link, and
+  confirm.
+- **CLI:** `gh pr merge <N> --repo swimblocks/<repo> --admin --squash --delete-branch`.
+
+This is the deliberate steady state for a single-admin org. Revisit when a second code owner
+joins.
+
 Direct pushes to `main` are discouraged; go through a PR. Never use `--no-verify` or bypass
 signing. Create new commits rather than amending already-pushed ones.
+
+### Code comments
+
+- **TODO / aspirational comments must link to a GitHub issue.** A comment that says "out of
+  scope for now" or "should add X later" is just a wish; the next reader (human or agent)
+  has no way to act on it. Open a tracking issue and reference it inline:
+
+  ```python
+  # See https://github.com/swimblocks/<repo>/issues/42 for the proper solution;
+  # the regex below is the cheap stopgap.
+  ```
+
+  Same rule for shell, YAML, etc. If you don't have an issue number yet, file one before the
+  PR lands. Reviewers will (and have!) push back on bare TODOs.
 
 ## Quality gates
 
@@ -85,20 +118,31 @@ of truth**; the table below is a human-readable summary.
 
 ### Branch protection (same source of truth)
 
-`settings.yml` also carries a `branches:` section that the reconciler applies to every repo's
-default branch via `PUT /repos/.../branches/main/protection`. Today that's:
+**Public repos** use GitHub Rulesets (`rulesets:` block in `settings.yml`). Rulesets support
+bypass actors, so org owners and repo admins can force-push when genuinely needed (see
+[Force-push break-glass](#force-push-break-glass) below). The ruleset enforces:
 
 - Pull request required (1 approving review, code-owner review required, stale reviews
-  dismissed on new pushes).
-- Linear history required (i.e. squash-only — pairs with the merge-method settings above).
-- No force pushes, no deletions, no unresolved conversations at merge time.
-- `enforce_admins: false` — the admin (you) keeps an override so a single-admin org doesn't
-  deadlock approving its own PRs. Tighten this once another code owner exists.
+  dismissed on new pushes, all threads resolved).
+- Linear history required (squash-only — pairs with the merge-method settings above).
+- No force pushes or deletions for non-admins.
 
-> **Private-repo caveat:** GitHub Free does not allow branch protection on private repositories.
-> The reconciler will skip and report this as a known limitation; the repo remains aligned on
-> all the merge-method fields. Either upgrade the plan or flip the repo to public to enable
-> protection.
+**Private repos** fall back to the legacy `branches:` protection block. GitHub Free does not
+allow branch protection on private repositories, so the reconciler skips it and reports it as a
+known limitation; the repo remains aligned on all the merge-method fields. Either upgrade the
+plan or flip the repo public to enable protection.
+
+### Force-push break-glass
+
+Org owners and repo admins are listed as bypass actors in the ruleset, so a force-push
+(needed for a history rewrite, purging a file that shouldn't have been committed, etc.) is just:
+
+```bash
+git push origin main --force
+```
+
+No UI changes, no disabling protection first. GitHub records the bypass in the org audit log.
+This only works on public repos (rulesets); private repos have no protection at all on Free.
 
 ### How it's enforced
 
