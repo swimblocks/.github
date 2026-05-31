@@ -22,6 +22,13 @@ Organization-wide defaults for [SwimBlocks](https://github.com/swimblocks).
   pre-public step we learn we need.
 - [`scripts/apply-settings.py`](scripts/apply-settings.py) — applies `settings.yml` to a given
   repo; used by the reconciler workflow, `create-repo.sh`, and `make-public.sh`
+- [`scripts/install-local-agent-files.sh`](scripts/install-local-agent-files.sh) — writes the
+  user-local agent pointer files (`~/src/AGENTS.md` etc.) so agents invoked outside any
+  specific repo still pick up the canonical rules. See
+  [`docs/development.md`](docs/development.md).
+- [`docs/development.md`](docs/development.md) — recommended local layout (ghq),
+  user-local agent files, and how they relate to per-repo files. Start here when setting up
+  a new machine.
 
 GitHub automatically applies the community-health files above to any repo in the org that
 doesn't define its own. Reusable workflows are referenced explicitly via

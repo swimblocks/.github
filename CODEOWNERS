@@ -1,17 +1,11 @@
 # Code owners for swimblocks/.github
 #
-# Changes to org-wide policy require admin review. Branch protection on `main`
-# enforces this via "Require review from Code Owners".
+# Every file in this repo carries org-wide policy weight, so the catch-all owner
+# below is enough: branch-protection "Require review from Code Owners" gates any
+# change to any file through @gavinbee.
+#
+# Don't add per-file lines unless they need a *different* owner from the default
+# — CODEOWNERS evaluates last-match-wins, so duplicating @gavinbee on individual
+# paths adds noise without changing behaviour.
 
-# Default: anything in this repo
-*                                                  @gavinbee
-
-# Belt and braces — explicitly list the policy-bearing files so a CODEOWNERS
-# typo never bypasses the review gate on them.
-/.github/settings.yml                              @gavinbee
-/.github/workflows/reconcile-repo-defaults.yml     @gavinbee
-/scripts/apply-settings.py                         @gavinbee
-/scripts/create-repo.sh                            @gavinbee
-/scripts/make-public.sh                            @gavinbee
-/CONTRIBUTING.md                                   @gavinbee
-/AGENTS.md                                         @gavinbee
+*  @gavinbee

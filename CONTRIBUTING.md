@@ -5,6 +5,9 @@ These are the shared development standards for every repository in the
 `CONTRIBUTING.md` with project-specific notes, but everything here applies unless a repo
 explicitly overrides it.
 
+> First time setting up locally? Read [`docs/development.md`](docs/development.md)
+> for the recommended layout, the user-local agent pointer files, and the install script.
+
 > **Note for AI agents:** read this file before making changes. It is the source of truth for
 > how work flows through these repos. See also the scope note under "Project scope" below —
 > do not generalize Canada-specific features to other countries unless an issue asks for it.
