@@ -26,9 +26,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements.txt
 
-      - name: Install PyYAML
-        run: pip install --quiet PyYAML
+      - name: Install dependencies
+        run: pip install --quiet -r requirements.txt
 
       - name: Apply settings to every repo in swimblocks
         env:
