@@ -3,11 +3,18 @@
   "features": {
     "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
   },
+  // A devcontainer is a persistent, shared environment, so it gets a venv —
+  // see docs/design/0002-venv-standard.md. This lands a contributor (or agent)
+  // in exactly the environment AGENTS.md prescribes, with no manual step.
+  "postCreateCommand": "python3 -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -r requirements-dev.txt",
   "customizations": {
     "vscode": {
       "extensions": [
         "anthropic.claude-code"
-      ]
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+      }
     }
   }
 }

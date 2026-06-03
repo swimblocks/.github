@@ -12,3 +12,4 @@ sequential, never reused.
 | # | Title | Status |
 |---|---|---|
 | [0001](0001-github-app-reconciler.md) | GitHub App authentication for the reconciler workflow | implemented |
+| [0002](0002-venv-standard.md) | venv standard + devcontainer provisioning | implemented |

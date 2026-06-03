@@ -97,6 +97,23 @@ signing. Create new commits rather than amending already-pushed ones.
 - Dependabot config lives **per repo** at `.github/dependabot.yml` (GitHub has no org-wide
   Dependabot inheritance). Weekly pip + github-actions updates is the default.
 
+## Environments (venv)
+
+Whether to use a virtualenv depends on whether the environment is **persistent/shared** or
+**ephemeral/single-purpose**:
+
+- **Persistent or shared → use a venv.** A developer laptop or a devcontainer/Codespace hosts
+  many projects and outlives any single task; global installs cause cross-project conflicts.
+  Create and activate `.venv` (gitignored org-wide), then `pip install -r requirements-dev.txt`.
+  A repo's devcontainer should provision this automatically via `postCreateCommand` so there's no
+  manual step — see [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) here for
+  the pattern.
+- **Ephemeral, single-job → no venv.** A GitHub Actions runner is a throwaway VM dedicated to one
+  job; the machine is already the isolation. CI workflows install globally on purpose.
+
+Rationale and the cross-repo rollout are in
+[`docs/design/0002-venv-standard.md`](docs/design/0002-venv-standard.md).
+
 ## Secrets & data
 
 - Never commit secrets (`.env`, credentials, service-account keys) — they're gitignored.
