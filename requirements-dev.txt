@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Dev-only tooling — lint + tests. Layered on the runtime deps above.
+pytest>=8
+ruff>=0.6
