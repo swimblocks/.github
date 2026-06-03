@@ -151,8 +151,9 @@ This only works on public repos (rulesets); private repos have no protection at 
 
 - **`.github/workflows/reconcile-repo-defaults.yml`** — a scheduled Actions workflow that runs
   weekly, on `workflow_dispatch`, and on a `repo-created` `repository_dispatch` event. It reads
-  `settings.yml` and PATCHes any drift on every repo in the org. (Requires a repo secret
-  `SWIMBLOCKS_ADMIN_TOKEN` with admin rights on org repos.)
+  `settings.yml` and PATCHes any drift on every repo in the org. It authenticates as a GitHub App
+  (secrets `APP_ID` + `APP_PRIVATE_KEY`); see [`docs/reconciler.md`](docs/reconciler.md) for how it
+  works, the app's permissions, and the setup / key-rotation runbook.
 - **[`CODEOWNERS`](CODEOWNERS)** + branch protection on `main` (now also in `settings.yml`) —
   `settings.yml` and the reconciler workflow can only change via a PR that the designated
   admin reviews.
