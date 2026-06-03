@@ -81,6 +81,13 @@ commits rather than amending already-pushed ones.
   freeze` output, no transitive pins.
 - `requirements-dev.txt`: layered on top, adds dev-only tools (e.g. `ruff`).
 - Dependabot config lives **per repo** at `.github/dependabot.yml` (no org-wide inheritance).
+- **venv in persistent/shared environments, not ephemeral CI.** On a laptop or in a
+  devcontainer/Codespace, work inside `.venv` (`python -m venv .venv`, then
+  `pip install -r requirements-dev.txt`) — don't install into the global interpreter. A repo's
+  devcontainer should provision this via `postCreateCommand`. CI runners are throwaway and
+  single-job, so they install globally on purpose. Full rationale:
+  [CONTRIBUTING.md](CONTRIBUTING.md#environments-venv) /
+  [`docs/design/0002-venv-standard.md`](docs/design/0002-venv-standard.md).
 
 ## 7. Secrets, data, and PII
 
