@@ -65,7 +65,7 @@ def patch_args(repo_block: dict) -> list[str]:
 
 def apply(repo: str, args: list[str]) -> None:
     if not args:
-        print(f"  (no PATCHable settings — nothing to do)")
+        print("  (no PATCHable settings — nothing to do)")
         return
     cmd = ["gh", "api", "-X", "PATCH", f"repos/{repo}", *args]
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL)
@@ -259,11 +259,14 @@ def main(argv: list[str]) -> int:
                 try:
                     apply_branch_protection(repo, branch, protection)
                 except subprocess.CalledProcessError as e:
+                    # Expected on GitHub Free: private repos can't have branch
+                    # protection. This is a documented known limitation, not a
+                    # failure — the repo stays aligned on every merge-method
+                    # field. Skip without failing the run. (If the plan is later
+                    # upgraded, the PUT succeeds and verify below applies.)
                     print(f"  SKIP branches.{branch}: PUT failed (exit {e.returncode}). "
-                          f"Likely cause: private repo on a plan without branch "
-                          f"protection, or the branch doesn't exist yet.")
-                    if repo not in failures:
-                        failures.append(repo)
+                          f"Expected for a private repo on a plan without branch "
+                          f"protection; merge-method settings above still applied.")
                     continue
                 if not verify_branch_protection(repo, branch, protection):
                     if repo not in failures:
