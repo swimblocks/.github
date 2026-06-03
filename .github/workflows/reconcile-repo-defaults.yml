@@ -20,6 +20,13 @@ jobs:
   reconcile:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: swimblocks
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
@@ -33,14 +40,12 @@ jobs:
 
       - name: Apply settings to every repo in swimblocks
         env:
-          # PAT (or fine-grained token) with `repo` admin scope on the org.
-          # Stored as a repository secret on swimblocks/.github.
-          GH_TOKEN: ${{ secrets.SWIMBLOCKS_ADMIN_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
           repos=$(gh repo list swimblocks --limit 200 --json nameWithOwner --jq '.[].nameWithOwner')
           if [ -z "$repos" ]; then
-            echo "No repos found — token may lack visibility into the org."
+            echo "No repos found — app may lack visibility into the org."
             exit 1
           fi
           # shellcheck disable=SC2086
