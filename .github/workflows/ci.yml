@@ -1,0 +1,17 @@
+name: ci
+
+# Lint + tests for this repo's own Python (scripts/, tests/). Dogfoods the
+# shared reusable workflow this repo publishes, using the local copy so a PR
+# that changes the reusable workflow is exercised by its own CI.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/reusable-python-ci.yml
