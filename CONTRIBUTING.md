@@ -120,6 +120,40 @@ Rationale and the cross-repo rollout are in
 - Never commit real personal data (officials' names/emails, club contact lists). Treat any
   such CSV/PDF as local sample data and gitignore it, or scrub before committing.
 
+### Test fixtures: Faker is the standard
+
+Our data is about real volunteers and real minors, so tests can't just use a trimmed-down
+copy of production. Every repo needing realistic-looking people in fixtures uses
+[Faker](https://faker.readthedocs.io/) — `faker>=30.0`, locale `en_CA`. Don't invent a
+per-repo substitution scheme; a scheme nobody else recognises is a scheme nobody else audits.
+
+The rules, and why each exists:
+
+- **Seed Faker and record the seed.** Unseeded fixtures change every run, so a diff tells you
+  nothing and a failure can't be reproduced. Same seed plus same Faker version gives identical
+  output; if a Faker major bump shifts it, regenerate deliberately and say so in the commit.
+- **Map each real value to one fake value, consistently**, keyed on something stable — a
+  registry ID, not a name. Otherwise rows that referenced each other in the real data stop
+  doing so in the fixture, silently destroying the thing under test.
+- **Keep any real→fake mapping out of git.** It's useful for debugging a fixture row, and it is
+  a re-identification table, so it belongs with your local secrets.
+- **Faker doesn't know swimming.** Roles, club codes, credential and meet names come from a
+  constrained vocabulary in the generator. Faker names a person; it does not name an
+  `Inspector of Turns Evaluation #2`.
+- **Keep the generator beside the fixture it writes**, with a `--help`, so regenerating is one
+  command a reviewer can run rather than prose they have to trust.
+
+**Prefer fully synthetic data** — generate the shape you need and there's no privacy problem
+at all. Pseudonymize real data only when its real structure is the point, such as reproducing
+a legacy system's behaviour where real dates and real credential combinations are exactly
+what's under test. Then read only the columns you need: personal data you never fetched is
+personal data you cannot leak, and it turns the reviewer's job into checking a column list
+rather than inspecting a diff.
+
+Dates and category combinations can still re-identify someone inside a small club even with
+names removed. Say so in the fixture's README rather than implying pseudonymization made the
+data anonymous.
+
 ## Repo settings (org-wide policy)
 
 Every SwimBlocks repo's GitHub settings are governed by
