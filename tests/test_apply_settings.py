@@ -73,7 +73,10 @@ class TestFlattenProtection:
         assert apply_settings._flatten_protection({})["enforce_admins"] is None
 
     def test_non_wrapper_dict_passes_through_unchanged(self):
-        reviews = {"required_approving_review_count": 1, "require_code_owner_reviews": True}
+        reviews = {
+            "required_approving_review_count": 1,
+            "require_code_owner_reviews": True,
+        }
         actual = {"required_pull_request_reviews": reviews}
         flat = apply_settings._flatten_protection(actual)
         assert flat["required_pull_request_reviews"] == reviews
