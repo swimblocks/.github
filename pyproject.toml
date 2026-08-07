@@ -1,0 +1,12 @@
+[tool.ruff]
+# CONTRIBUTING.md has documented this selection since the lint gate was introduced,
+# but no config file ever enforced it, so `ruff check .` ran with whatever the
+# installed ruff version defaults to. With `ruff>=0.6` in requirements-dev.txt, a new
+# ruff release can therefore start failing CI on untouched code — which is exactly
+# what happened: main was green, and the next PR (docs only) went red on SIM102 and
+# PLW1510 findings in scripts/apply-settings.py.
+#
+# Pinning the rule selection instead of pinning ruff keeps the `>=` minimums policy
+# in section "Dependencies" intact while making the gate deterministic. Widening this
+# list is a deliberate policy change: do it in a PR that also fixes the findings.
+lint.select = ["E", "F", "I", "W"]
