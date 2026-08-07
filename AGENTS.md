@@ -96,6 +96,24 @@ commits rather than amending already-pushed ones.
   Treat such CSV/PDF as local sample data and gitignore it, or scrub before commit.
 - Report any exposure privately via the repo's Security tab, not a public issue.
 
+**Test fixtures use [Faker](https://faker.readthedocs.io/)** (`faker>=30.0`, locale `en_CA`).
+This is the standard — don't hand-roll a substitution scheme.
+
+- **Seed it** (`Faker.seed(n)`) and record the seed, so the same seed and Faker version
+  reproduce the fixture byte for byte.
+- **Same real value → same fake value**, keyed on a stable identifier, so references between
+  rows still line up. Keep any real→fake mapping **out of git**.
+- **Faker doesn't know swimming.** Roles, club codes and credential names come from a
+  constrained vocabulary in the generator, not from Faker.
+- **Put the generator beside the fixture** it produces, so regenerating is one documented
+  command.
+- **Prefer generating synthetic data outright.** Pseudonymize real data only when its real
+  structure is the point — a correctness oracle, say — and then read only the columns you
+  need, so personal data is never fetched in the first place.
+
+Reference implementation:
+[`deck-eval-parser/tests/fixtures/form_field/make_synthetic_fixture.py`](https://github.com/swimblocks/deck-eval-parser/blob/main/tests/fixtures/form_field/make_synthetic_fixture.py).
+
 ## 8. Creating a new repo
 
 Use [`scripts/create-repo.sh`](scripts/create-repo.sh) — **never** the GitHub UI. It applies
