@@ -148,7 +148,8 @@ def delete_legacy_protection(repo: str, branch: str) -> None:
         capture_output=True, text=True,
     )
     if result.returncode == 0:
-        print(f"  OK  removed legacy branch protection on '{branch}' (superseded by ruleset)")
+        print(f"  OK  removed legacy branch protection on '{branch}' "
+              f"(superseded by ruleset)")
 
 
 def apply_branch_protection(repo: str, branch: str, protection: dict) -> None:
@@ -190,7 +191,9 @@ def verify_branch_protection(repo: str, branch: str, protection: dict) -> bool:
             continue
         got = actual_flat.get(key)
         if isinstance(expected, dict) and isinstance(got, dict):
-            mismatch = {k: (got.get(k), v) for k, v in expected.items() if got.get(k) != v}
+            mismatch = {
+                k: (got.get(k), v) for k, v in expected.items() if got.get(k) != v
+            }
             sub_ok = not mismatch
             marker = "OK " if sub_ok else "FAIL"
             print(f"  {marker} branches.{branch}.{key}: "
@@ -200,7 +203,8 @@ def verify_branch_protection(repo: str, branch: str, protection: dict) -> bool:
         else:
             sub_ok = got == expected
             marker = "OK " if sub_ok else "FAIL"
-            print(f"  {marker} branches.{branch}.{key}: {got!r} (expected {expected!r})")
+            print(f"  {marker} branches.{branch}.{key}: {got!r} "
+                  f"(expected {expected!r})")
             if not sub_ok:
                 ok = False
     return ok
@@ -232,8 +236,9 @@ def main(argv: list[str]) -> int:
         is_public = get_repo_visibility(repo) == "public"
 
         if is_public and rulesets_block:
-            # Public repos: rulesets with bypass actors for admin force-push break-glass.
-            # Legacy branch protection is removed so it can't silently override the ruleset.
+            # Public repos: rulesets with bypass actors for admin force-push
+            # break-glass. Legacy branch protection is removed so it can't
+            # silently override the ruleset.
             for ruleset in rulesets_block:
                 try:
                     apply_ruleset(repo, ruleset)
@@ -250,7 +255,8 @@ def main(argv: list[str]) -> int:
                 if branch:
                     delete_legacy_protection(repo, branch)
         else:
-            # Private repos: attempt legacy branch protection (expected to fail on Free plan).
+            # Private repos: attempt legacy branch protection (expected to fail
+            # on the Free plan).
             for entry in branches_block:
                 branch = entry.get("name")
                 protection = entry.get("protection") or {}
@@ -264,7 +270,8 @@ def main(argv: list[str]) -> int:
                     # failure — the repo stays aligned on every merge-method
                     # field. Skip without failing the run. (If the plan is later
                     # upgraded, the PUT succeeds and verify below applies.)
-                    print(f"  SKIP branches.{branch}: PUT failed (exit {e.returncode}). "
+                    print(f"  SKIP branches.{branch}: PUT failed "
+                          f"(exit {e.returncode}). "
                           f"Expected for a private repo on a plan without branch "
                           f"protection; merge-method settings above still applied.")
                     continue
