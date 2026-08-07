@@ -31,15 +31,25 @@ explicitly overrides it.
 1. **Open an issue first.** Describe the problem or feature. This is the unit of work.
 2. **Branch** off `main`, named `<issue-number>-<short-slug>` (e.g. `42-fix-date-parsing`).
 3. **Do the work.** Keep commits coherent. Run tests + lint locally before pushing.
-4. **Open a PR** whose description includes `Closes #<issue-number>` and explains the *why*.
-5. **CI must be green** (lint + tests) before merge.
-6. **Hand off for review.** When an **agent** opens the PR, it stops here and gives the author
-   a short summary — what changed, why, test/lint results, and the PR link — then waits. Agents
-   do **not** self-merge.
+4. **Read the change before it becomes a PR.** A pull request is a claim that its author
+   stands behind the change, so nobody opens one carrying work the author hasn't actually
+   read. Run `git diff main...` and read it. This is where debug output, stray files, and
+   data or credentials that were never meant to be committed get caught.
+   - When an **agent** made the change, the author hasn't seen it yet — so the agent stops
+     *before* opening the PR. It pushes the branch, posts a short summary (what changed, why,
+     lint/test results), and waits. The author reviews locally, then opens the PR or asks the
+     agent to.
+   - An agent that is unsure about a decision raises it with the author **here**, not in the
+     PR description. A question written into a PR reads as though the author is asking their
+     reviewers, which sponsors a question they never asked.
+5. **Open a PR** whose description includes `Closes #<issue-number>` and explains the *why*.
+6. **CI must be green** (lint + tests) before merge.
+7. **Hand off for merge.** Agents do **not** self-merge: after CI is green, post the PR link
+   and stop.
    - *Exception:* large mechanical changes spanning many repos (e.g. an org-wide rename like
-     dropping the `canswim` prefix) may be agent-merged to avoid dozens of round-trips, by
-     prior agreement with the author.
-7. **Review & squash-merge.** The author reviews the PR and squash-merges it themselves, then
+     dropping the `canswim` prefix) may be agent-opened and agent-merged to avoid dozens of
+     round-trips, by prior agreement with the author.
+8. **Review & squash-merge.** The author reviews the PR and squash-merges it themselves, then
    deletes the branch. The squash commit message should carry the meaningful detail, not just
    the PR title.
 
