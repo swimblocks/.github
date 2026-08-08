@@ -50,11 +50,16 @@ For **every** change:
 2. **Branch** off `main`, named `<issue-number>-<short-slug>`.
 3. **Make focused commits.** Coherent, single-purpose. Run `ruff check .` and `pytest -q`
    locally before pushing.
-4. **Open a PR** whose description includes `Closes #<issue-number>` and explains the *why*.
-5. **Wait for CI green** (lint + tests).
-6. **Hand off.** Post a short summary to the human author — what changed, why, lint/test
-   results, PR link — then stop. **Agents do not self-merge.** *Exception:* a large mechanical
-   change spanning many repos may be agent-merged by prior agreement with the author.
+4. **Hand off for local review — do not open the PR.** Nobody opens a pull request carrying
+   work its author hasn't read, and the author hasn't seen yours. Push the branch, post a
+   short summary (what changed, why, lint/test results), and stop. The author reviews
+   locally, then opens the PR or asks you to.
+   - **Raise open questions here, not in the PR description.** A question written into a PR
+     reads as though the author is asking their reviewers — it sponsors a question they never
+     asked and hands your decision to their collaborators.
+5. **Wait for CI green** (lint + tests) once the PR exists.
+6. **Do not self-merge.** Post the PR link and stop. *Exception:* a large mechanical change
+   spanning many repos may be agent-opened and agent-merged by prior agreement with the author.
 7. The human reviews and squash-merges.
 
 Do not push directly to `main`. Do not use `--no-verify` or otherwise skip hooks. Create new
