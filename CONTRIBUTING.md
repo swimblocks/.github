@@ -29,7 +29,10 @@ explicitly overrides it.
 ## Workflow: issue → branch → PR → squash-merge
 
 1. **Open an issue first.** Describe the problem or feature. This is the unit of work.
-2. **Branch** off `main`, named `<issue-number>-<short-slug>` (e.g. `42-fix-date-parsing`).
+   See [the `no-issue` exception](#the-no-issue-exception) for changes small enough to
+   skip this.
+2. **Branch** off `main`, named `<issue-number>-<short-slug>` (e.g. `42-fix-date-parsing`),
+   or a descriptive slug when there is no issue.
 3. **Do the work.** Keep commits coherent. Run tests + lint locally before pushing.
 4. **Read the change before it becomes a PR.** A pull request is a claim that its author
    stands behind the change, so nobody opens one carrying work the author hasn't actually
@@ -43,6 +46,7 @@ explicitly overrides it.
      PR description. A question written into a PR reads as though the author is asking their
      reviewers, which sponsors a question they never asked.
 5. **Open a PR** whose description includes `Closes #<issue-number>` and explains the *why*.
+   A `no-issue` PR has no number to close, and carries the `NO-ISSUE:` trailer instead.
 6. **CI must be green** (lint + tests) before merge.
 7. **Hand off for merge.** Agents do **not** self-merge: after CI is green, post the PR link
    and stop.
@@ -52,6 +56,27 @@ explicitly overrides it.
 8. **Review & squash-merge.** The author reviews the PR and squash-merges it themselves, then
    deletes the branch. The squash commit message should carry the meaningful detail, not just
    the PR title.
+
+### The `no-issue` exception
+
+A change small enough to explain itself — a typo, a doc clarification, recording a decision
+already made — may go straight to a PR. Label it `no-issue` and end the description with a
+trailer saying why:
+
+```
+NO-ISSUE: Clarifying Documentation
+```
+
+The ceremony in step 1 is worth paying whenever a change needs a decision recorded, argued,
+or found again later. It is pure overhead when the change carries its own justification in
+one paragraph. The label and the trailer are what keep the exception **visible and
+auditable** rather than silent: every PR that skipped the issue says so, in a form you can
+search for.
+
+Use a real issue whenever the change needs discussion, has acceptance criteria, or is
+something a future reader would look for in the tracker. Changes to the rules in this file
+are always in that category — a policy that nobody can find the reasoning for is a policy
+that gets re-litigated.
 
 ### Solo-admin merge path
 

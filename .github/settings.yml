@@ -24,6 +24,18 @@ repository:
   delete_branch_on_merge: true
   allow_update_branch: true
 
+# Labels that should exist in every repo.
+#
+# NOT YET APPLIED. `apply-settings.py` ignores this block — it acts on `repository`,
+# `branches` and `rulesets` only, so these labels still have to be created per repo with
+# `gh label create`. Recorded here so the canonical set has one home, per this file's
+# convention of documenting keys we don't act on yet. Wiring it up is
+# https://github.com/swimblocks/.github/issues/46.
+labels:
+  - name: no-issue
+    color: ededed
+    description: Change small enough to skip the issue-first rule; rationale is in the PR body
+
 # Branch protection for public repos is handled via GitHub Rulesets (see `rulesets:` below),
 # which support bypass actors so org owners and repo admins can force-push without extra steps
 # — just `git push origin main --force`. GitHub records the bypass in the audit log.
