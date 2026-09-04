@@ -84,3 +84,61 @@ class TestFlattenProtection:
     def test_output_always_covers_every_protection_key(self):
         flat = apply_settings._flatten_protection({})
         assert set(flat) == apply_settings.PROTECTION_KEYS
+
+
+class TestNormalizeColor:
+    def test_strips_leading_hash(self):
+        assert apply_settings.normalize_color("#EDEDED") == "ededed"
+
+    def test_lowercases(self):
+        assert apply_settings.normalize_color("A2EEEF") == "a2eeef"
+
+    def test_already_normal_is_unchanged(self):
+        assert apply_settings.normalize_color("ededed") == "ededed"
+
+    def test_none_becomes_empty(self):
+        assert apply_settings.normalize_color(None) == ""
+
+
+class TestLabelUpdates:
+    _DESIRED = {"name": "no-issue", "color": "ededed", "description": "Skips the issue"}
+
+    def test_in_sync_returns_nothing(self):
+        actual = {"color": "ededed", "description": "Skips the issue"}
+        assert apply_settings.label_updates(self._DESIRED, actual) == {}
+
+    def test_hash_prefix_and_case_do_not_count_as_drift(self):
+        desired = {"color": "#EDEDED", "description": "Skips the issue"}
+        actual = {"color": "ededed", "description": "Skips the issue"}
+        assert apply_settings.label_updates(desired, actual) == {}
+
+    def test_colour_drift_is_reported_normalized(self):
+        actual = {"color": "FF0000", "description": "Skips the issue"}
+        assert apply_settings.label_updates(self._DESIRED, actual) == {
+            "color": "ededed",
+        }
+
+    def test_description_drift_is_reported(self):
+        actual = {"color": "ededed", "description": "something else"}
+        assert apply_settings.label_updates(self._DESIRED, actual) == {
+            "description": "Skips the issue",
+        }
+
+    def test_null_description_on_the_repo_counts_as_empty(self):
+        # The API returns null, not "", for a label with no description.
+        desired = {"color": "ededed"}
+        actual = {"color": "ededed", "description": None}
+        assert apply_settings.label_updates(desired, actual) == {}
+
+    def test_missing_desired_colour_is_not_treated_as_drift(self):
+        # A YAML entry with no colour shouldn't blank the repo's colour.
+        desired = {"name": "no-issue", "description": "Skips the issue"}
+        actual = {"color": "ededed", "description": "Skips the issue"}
+        assert apply_settings.label_updates(desired, actual) == {}
+
+    def test_both_fields_drifted(self):
+        actual = {"color": "FF0000", "description": None}
+        assert apply_settings.label_updates(self._DESIRED, actual) == {
+            "color": "ededed",
+            "description": "Skips the issue",
+        }

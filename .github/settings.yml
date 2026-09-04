@@ -26,10 +26,11 @@ repository:
 
 # Labels that should exist in every repo.
 #
-# NOT YET APPLIED. `apply-settings.py` acts on `repository`, `branches` and `rulesets`
-# only, so these labels are still created per repo by hand with `gh label create`. This
-# block is the canonical set; teaching the reconciler to apply it is the remaining work on
-# https://github.com/swimblocks/.github/issues/46, which stays open until it lands.
+# Applied by `apply-settings.py`, which creates a missing label and corrects a drifted
+# colour or description. Reconciliation is **additive**: labels not listed here are left
+# alone, because repos also carry GitHub's defaults and Dependabot's (`dependencies`,
+# `python`), and deleting a label strips it from every issue and PR that uses it. This is
+# the minimum set, not the whole set.
 labels:
   - name: no-issue
     color: ededed

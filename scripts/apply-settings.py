@@ -26,8 +26,8 @@ import yaml
 
 # Only fields under `repository:` that we know how to PATCH via
 # `PATCH /repos/{owner}/{repo}`. Anything else in the YAML is left for a
-# future iteration (branches, labels, collaborators — Probot Settings'
-# other top-level sections).
+# future iteration (collaborators and Probot Settings' other top-level
+# sections); `branches`, `rulesets` and `labels` have their own handling below.
 PATCHABLE = {
     "allow_squash_merge",
     "allow_merge_commit",
@@ -86,6 +86,124 @@ def verify(repo: str, repo_block: dict) -> bool:
         if got != expected:
             ok = False
         print(f"  {marker} {key}: {got!r} (expected {expected!r})")
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# Labels
+#
+# Reconciliation here is **additive**: a label in `settings.yml` is created if
+# missing and corrected if its colour or description drifted, but labels the
+# YAML doesn't mention are left alone. Repos carry GitHub's defaults plus ones
+# Dependabot creates (`dependencies`, `python`), and deleting a label removes it
+# from every issue and PR that uses it — not something a scheduled job should do
+# behind your back. `settings.yml` is the minimum set, not the whole set.
+# ---------------------------------------------------------------------------
+
+def normalize_color(value: str | None) -> str:
+    """GitHub stores label colours as six lowercase hex digits with no '#'."""
+    return str(value or "").lstrip("#").lower()
+
+
+def label_updates(desired: dict, actual: dict) -> dict:
+    """Fields of *desired* that differ from *actual*. Empty dict means in sync."""
+    updates: dict[str, str] = {}
+    want_color = normalize_color(desired.get("color"))
+    if want_color and want_color != normalize_color(actual.get("color")):
+        updates["color"] = want_color
+    want_desc = desired.get("description") or ""
+    if want_desc != (actual.get("description") or ""):
+        updates["description"] = want_desc
+    return updates
+
+
+def list_labels(repo: str) -> dict[str, dict]:
+    """Every label on *repo*, keyed by lowercased name.
+
+    GitHub treats label names case-insensitively, so the key is lowercased to
+    stop a `No-Issue` on the repo reading as missing against a `no-issue` here.
+    """
+    # `--jq .[]` emits one compact object per line, which pages cleanly;
+    # `--paginate` alone would concatenate raw JSON arrays.
+    out = subprocess.run(
+        ["gh", "api", f"repos/{repo}/labels", "--paginate", "--jq", ".[]"],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    labels = [json.loads(line) for line in out.splitlines() if line.strip()]
+    return {label["name"].lower(): label for label in labels}
+
+
+def apply_labels(repo: str, labels_block: list[dict]) -> bool:
+    """Create or correct each label in *labels_block*. Returns False on any failure."""
+    if not labels_block:
+        return True
+    try:
+        actual = list_labels(repo)
+    except subprocess.CalledProcessError as e:
+        print(f"  FAIL labels: could not list (exit {e.returncode})")
+        return False
+
+    ok = True
+    for desired in labels_block:
+        name = desired.get("name")
+        if not name:
+            continue
+        existing = actual.get(name.lower())
+        try:
+            if existing is None:
+                subprocess.run(
+                    ["gh", "api", "-X", "POST", f"repos/{repo}/labels",
+                     "-f", f"name={name}",
+                     "-f", f"color={normalize_color(desired.get('color'))}",
+                     "-f", f"description={desired.get('description') or ''}"],
+                    check=True, stdout=subprocess.DEVNULL,
+                )
+                print(f"  OK  label '{name}': created")
+                continue
+            updates = label_updates(desired, existing)
+            if not updates:
+                continue
+            args: list[str] = []
+            for key, value in updates.items():
+                args.extend(["-f", f"{key}={value}"])
+            subprocess.run(
+                ["gh", "api", "-X", "PATCH", f"repos/{repo}/labels/{name}", *args],
+                check=True, stdout=subprocess.DEVNULL,
+            )
+            print(f"  OK  label '{name}': updated {', '.join(sorted(updates))}")
+        except subprocess.CalledProcessError as e:
+            print(f"  FAIL label '{name}': write failed (exit {e.returncode})")
+            ok = False
+    return ok
+
+
+def verify_labels(repo: str, labels_block: list[dict]) -> bool:
+    """Re-read the labels and compare, so a write that didn't take is reported."""
+    if not labels_block:
+        return True
+    try:
+        actual = list_labels(repo)
+    except subprocess.CalledProcessError as e:
+        print(f"  FAIL labels: could not list (exit {e.returncode})")
+        return False
+
+    ok = True
+    for desired in labels_block:
+        name = desired.get("name")
+        if not name:
+            continue
+        existing = actual.get(name.lower())
+        if existing is None:
+            print(f"  FAIL label '{name}': missing")
+            ok = False
+            continue
+        diff = label_updates(desired, existing)
+        if diff:
+            got = {k: (existing.get(k) or "") for k in diff}
+            print(f"  FAIL label '{name}': {got} (expected {diff})")
+            ok = False
+        else:
+            print(f"  OK  label '{name}': present")
     return ok
 
 
@@ -225,6 +343,7 @@ def main(argv: list[str]) -> int:
     args = patch_args(repo_block)
 
     rulesets_block = settings.get("rulesets") or []
+    labels_block = settings.get("labels") or []
 
     failures: list[str] = []
     for repo in argv[1:]:
@@ -232,6 +351,12 @@ def main(argv: list[str]) -> int:
         apply(repo, args)
         if not verify(repo, repo_block):
             failures.append(repo)
+
+        # Labels do not depend on visibility — private repos get them too.
+        if labels_block:
+            apply_labels(repo, labels_block)
+            if not verify_labels(repo, labels_block) and repo not in failures:
+                failures.append(repo)
 
         is_public = get_repo_visibility(repo) == "public"
 
