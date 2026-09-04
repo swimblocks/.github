@@ -26,11 +26,10 @@ repository:
 
 # Labels that should exist in every repo.
 #
-# NOT YET APPLIED. `apply-settings.py` ignores this block — it acts on `repository`,
-# `branches` and `rulesets` only, so these labels still have to be created per repo with
-# `gh label create`. Recorded here so the canonical set has one home, per this file's
-# convention of documenting keys we don't act on yet. Wiring it up is
-# https://github.com/swimblocks/.github/issues/46.
+# NOT YET APPLIED. `apply-settings.py` acts on `repository`, `branches` and `rulesets`
+# only, so these labels are still created per repo by hand with `gh label create`. This
+# block is the canonical set; teaching the reconciler to apply it is the remaining work on
+# https://github.com/swimblocks/.github/issues/46, which stays open until it lands.
 labels:
   - name: no-issue
     color: ededed
