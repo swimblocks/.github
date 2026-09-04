@@ -24,13 +24,10 @@ repository:
   delete_branch_on_merge: true
   allow_update_branch: true
 
-# Labels that should exist in every repo.
-#
-# Applied by `apply-settings.py`, which creates a missing label and corrects a drifted
-# colour or description. Reconciliation is **additive**: labels not listed here are left
-# alone, because repos also carry GitHub's defaults and Dependabot's (`dependencies`,
-# `python`), and deleting a label strips it from every issue and PR that uses it. This is
-# the minimum set, not the whole set.
+# Labels that should exist in every repo. Created when missing and then left alone —
+# the values here seed a new label, they don't govern an existing one. Labels not
+# listed are untouched: repos carry GitHub's defaults and Dependabot's too, and
+# deleting a label strips it from every issue and PR that used it.
 labels:
   - name: no-issue
     color: ededed

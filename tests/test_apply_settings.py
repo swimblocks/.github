@@ -100,45 +100,36 @@ class TestNormalizeColor:
         assert apply_settings.normalize_color(None) == ""
 
 
-class TestLabelUpdates:
-    _DESIRED = {"name": "no-issue", "color": "ededed", "description": "Skips the issue"}
+class TestMissingLabels:
+    _DESIRED = [
+        {"name": "no-issue", "color": "ededed", "description": "Skips the issue"},
+    ]
 
-    def test_in_sync_returns_nothing(self):
-        actual = {"color": "ededed", "description": "Skips the issue"}
-        assert apply_settings.label_updates(self._DESIRED, actual) == {}
+    def test_absent_label_is_reported(self):
+        assert apply_settings.missing_labels(self._DESIRED, {}) == self._DESIRED
 
-    def test_hash_prefix_and_case_do_not_count_as_drift(self):
-        desired = {"color": "#EDEDED", "description": "Skips the issue"}
-        actual = {"color": "ededed", "description": "Skips the issue"}
-        assert apply_settings.label_updates(desired, actual) == {}
+    def test_present_label_is_not_reported(self):
+        actual = {"no-issue": {"color": "ededed", "description": "Skips the issue"}}
+        assert apply_settings.missing_labels(self._DESIRED, actual) == []
 
-    def test_colour_drift_is_reported_normalized(self):
-        actual = {"color": "FF0000", "description": "Skips the issue"}
-        assert apply_settings.label_updates(self._DESIRED, actual) == {
-            "color": "ededed",
-        }
+    def test_name_match_is_case_insensitive(self):
+        # GitHub label names are case-insensitive, so a differently-cased
+        # label on the repo must not read as missing.
+        actual = {"no-issue": {"color": "ededed"}}
+        desired = [{"name": "No-Issue", "color": "ededed"}]
+        assert apply_settings.missing_labels(desired, actual) == []
 
-    def test_description_drift_is_reported(self):
-        actual = {"color": "ededed", "description": "something else"}
-        assert apply_settings.label_updates(self._DESIRED, actual) == {
-            "description": "Skips the issue",
-        }
+    def test_drifted_colour_is_not_treated_as_missing(self):
+        # Existing labels are left alone; only absence is acted on.
+        actual = {"no-issue": {"color": "ff0000", "description": "something else"}}
+        assert apply_settings.missing_labels(self._DESIRED, actual) == []
 
-    def test_null_description_on_the_repo_counts_as_empty(self):
-        # The API returns null, not "", for a label with no description.
-        desired = {"color": "ededed"}
-        actual = {"color": "ededed", "description": None}
-        assert apply_settings.label_updates(desired, actual) == {}
+    def test_entry_without_a_name_is_skipped(self):
+        assert apply_settings.missing_labels([{"color": "ededed"}], {}) == []
 
-    def test_missing_desired_colour_is_not_treated_as_drift(self):
-        # A YAML entry with no colour shouldn't blank the repo's colour.
-        desired = {"name": "no-issue", "description": "Skips the issue"}
-        actual = {"color": "ededed", "description": "Skips the issue"}
-        assert apply_settings.label_updates(desired, actual) == {}
-
-    def test_both_fields_drifted(self):
-        actual = {"color": "FF0000", "description": None}
-        assert apply_settings.label_updates(self._DESIRED, actual) == {
-            "color": "ededed",
-            "description": "Skips the issue",
-        }
+    def test_only_the_absent_entries_are_returned(self):
+        desired = [{"name": "no-issue"}, {"name": "needs-decision"}]
+        actual = {"no-issue": {"color": "ededed"}}
+        assert apply_settings.missing_labels(desired, actual) == [
+            {"name": "needs-decision"},
+        ]

@@ -92,29 +92,20 @@ def verify(repo: str, repo_block: dict) -> bool:
 # ---------------------------------------------------------------------------
 # Labels
 #
-# Reconciliation here is **additive**: a label in `settings.yml` is created if
-# missing and corrected if its colour or description drifted, but labels the
-# YAML doesn't mention are left alone. Repos carry GitHub's defaults plus ones
-# Dependabot creates (`dependencies`, `python`), and deleting a label removes it
-# from every issue and PR that uses it — not something a scheduled job should do
-# behind your back. `settings.yml` is the minimum set, not the whole set.
+# Create-if-missing, and nothing else. The values here seed a new label; they do
+# not govern an existing one. A repo that recolours its labels to group them
+# visually is doing something useful, and a weekly job reverting that would be
+# churn — colour carries no policy weight. What does carry weight is that the
+# label *exists*, since a PR cannot be given a label the repo doesn't have.
+#
+# Nor are unlisted labels removed: repos carry GitHub's defaults and the ones
+# Dependabot creates, and deleting a label strips it from every issue and PR
+# that used it. `settings.yml` is the minimum set, not the whole set.
 # ---------------------------------------------------------------------------
 
 def normalize_color(value: str | None) -> str:
     """GitHub stores label colours as six lowercase hex digits with no '#'."""
     return str(value or "").lstrip("#").lower()
-
-
-def label_updates(desired: dict, actual: dict) -> dict:
-    """Fields of *desired* that differ from *actual*. Empty dict means in sync."""
-    updates: dict[str, str] = {}
-    want_color = normalize_color(desired.get("color"))
-    if want_color and want_color != normalize_color(actual.get("color")):
-        updates["color"] = want_color
-    want_desc = desired.get("description") or ""
-    if want_desc != (actual.get("description") or ""):
-        updates["description"] = want_desc
-    return updates
 
 
 def list_labels(repo: str) -> dict[str, dict]:
@@ -133,8 +124,13 @@ def list_labels(repo: str) -> dict[str, dict]:
     return {label["name"].lower(): label for label in labels}
 
 
+def missing_labels(desired: list[dict], actual: dict[str, dict]) -> list[dict]:
+    """The entries of *desired* that *actual* has no label for."""
+    return [d for d in desired if d.get("name") and d["name"].lower() not in actual]
+
+
 def apply_labels(repo: str, labels_block: list[dict]) -> bool:
-    """Create or correct each label in *labels_block*. Returns False on any failure."""
+    """Create any label in *labels_block* the repo lacks. Returns False on failure."""
     if not labels_block:
         return True
     try:
@@ -144,41 +140,30 @@ def apply_labels(repo: str, labels_block: list[dict]) -> bool:
         return False
 
     ok = True
-    for desired in labels_block:
-        name = desired.get("name")
-        if not name:
-            continue
-        existing = actual.get(name.lower())
+    for desired in missing_labels(labels_block, actual):
+        name = desired["name"]
         try:
-            if existing is None:
-                subprocess.run(
-                    ["gh", "api", "-X", "POST", f"repos/{repo}/labels",
-                     "-f", f"name={name}",
-                     "-f", f"color={normalize_color(desired.get('color'))}",
-                     "-f", f"description={desired.get('description') or ''}"],
-                    check=True, stdout=subprocess.DEVNULL,
-                )
-                print(f"  OK  label '{name}': created")
-                continue
-            updates = label_updates(desired, existing)
-            if not updates:
-                continue
-            args: list[str] = []
-            for key, value in updates.items():
-                args.extend(["-f", f"{key}={value}"])
             subprocess.run(
-                ["gh", "api", "-X", "PATCH", f"repos/{repo}/labels/{name}", *args],
+                ["gh", "api", "-X", "POST", f"repos/{repo}/labels",
+                 "-f", f"name={name}",
+                 "-f", f"color={normalize_color(desired.get('color'))}",
+                 "-f", f"description={desired.get('description') or ''}"],
                 check=True, stdout=subprocess.DEVNULL,
             )
-            print(f"  OK  label '{name}': updated {', '.join(sorted(updates))}")
+            print(f"  OK  label '{name}': created")
         except subprocess.CalledProcessError as e:
-            print(f"  FAIL label '{name}': write failed (exit {e.returncode})")
+            print(f"  FAIL label '{name}': create failed (exit {e.returncode})")
             ok = False
     return ok
 
 
 def verify_labels(repo: str, labels_block: list[dict]) -> bool:
-    """Re-read the labels and compare, so a write that didn't take is reported."""
+    """Re-read the labels and confirm each one exists.
+
+    Presence is the whole assertion — this only ever creates — so checking
+    presence checks everything claimed. (Contrast `verify_ruleset`, where the
+    rules are the substance and go unchecked: https://github.com/swimblocks/.github/issues/45)
+    """
     if not labels_block:
         return True
     try:
@@ -192,18 +177,11 @@ def verify_labels(repo: str, labels_block: list[dict]) -> bool:
         name = desired.get("name")
         if not name:
             continue
-        existing = actual.get(name.lower())
-        if existing is None:
+        if name.lower() in actual:
+            print(f"  OK  label '{name}': present")
+        else:
             print(f"  FAIL label '{name}': missing")
             ok = False
-            continue
-        diff = label_updates(desired, existing)
-        if diff:
-            got = {k: (existing.get(k) or "") for k in diff}
-            print(f"  FAIL label '{name}': {got} (expected {diff})")
-            ok = False
-        else:
-            print(f"  OK  label '{name}': present")
     return ok
 
 
