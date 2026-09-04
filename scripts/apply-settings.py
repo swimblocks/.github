@@ -26,8 +26,8 @@ import yaml
 
 # Only fields under `repository:` that we know how to PATCH via
 # `PATCH /repos/{owner}/{repo}`. Anything else in the YAML is left for a
-# future iteration (branches, labels, collaborators — Probot Settings'
-# other top-level sections).
+# future iteration (collaborators and Probot Settings' other top-level
+# sections); `branches`, `rulesets` and `labels` have their own handling below.
 PATCHABLE = {
     "allow_squash_merge",
     "allow_merge_commit",
@@ -86,6 +86,102 @@ def verify(repo: str, repo_block: dict) -> bool:
         if got != expected:
             ok = False
         print(f"  {marker} {key}: {got!r} (expected {expected!r})")
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# Labels
+#
+# Create-if-missing, and nothing else. The values here seed a new label; they do
+# not govern an existing one. A repo that recolours its labels to group them
+# visually is doing something useful, and a weekly job reverting that would be
+# churn — colour carries no policy weight. What does carry weight is that the
+# label *exists*, since a PR cannot be given a label the repo doesn't have.
+#
+# Nor are unlisted labels removed: repos carry GitHub's defaults and the ones
+# Dependabot creates, and deleting a label strips it from every issue and PR
+# that used it. `settings.yml` is the minimum set, not the whole set.
+# ---------------------------------------------------------------------------
+
+def normalize_color(value: str | None) -> str:
+    """GitHub stores label colours as six lowercase hex digits with no '#'."""
+    return str(value or "").lstrip("#").lower()
+
+
+def list_labels(repo: str) -> dict[str, dict]:
+    """Every label on *repo*, keyed by lowercased name.
+
+    GitHub treats label names case-insensitively, so the key is lowercased to
+    stop a `No-Issue` on the repo reading as missing against a `no-issue` here.
+    """
+    # `--jq .[]` emits one compact object per line, which pages cleanly;
+    # `--paginate` alone would concatenate raw JSON arrays.
+    out = subprocess.run(
+        ["gh", "api", f"repos/{repo}/labels", "--paginate", "--jq", ".[]"],
+        check=True, capture_output=True, text=True,
+    ).stdout
+    labels = [json.loads(line) for line in out.splitlines() if line.strip()]
+    return {label["name"].lower(): label for label in labels}
+
+
+def missing_labels(desired: list[dict], actual: dict[str, dict]) -> list[dict]:
+    """The entries of *desired* that *actual* has no label for."""
+    return [d for d in desired if d.get("name") and d["name"].lower() not in actual]
+
+
+def apply_labels(repo: str, labels_block: list[dict]) -> bool:
+    """Create any label in *labels_block* the repo lacks. Returns False on failure."""
+    if not labels_block:
+        return True
+    try:
+        actual = list_labels(repo)
+    except subprocess.CalledProcessError as e:
+        print(f"  FAIL labels: could not list (exit {e.returncode})")
+        return False
+
+    ok = True
+    for desired in missing_labels(labels_block, actual):
+        name = desired["name"]
+        try:
+            subprocess.run(
+                ["gh", "api", "-X", "POST", f"repos/{repo}/labels",
+                 "-f", f"name={name}",
+                 "-f", f"color={normalize_color(desired.get('color'))}",
+                 "-f", f"description={desired.get('description') or ''}"],
+                check=True, stdout=subprocess.DEVNULL,
+            )
+            print(f"  OK  label '{name}': created")
+        except subprocess.CalledProcessError as e:
+            print(f"  FAIL label '{name}': create failed (exit {e.returncode})")
+            ok = False
+    return ok
+
+
+def verify_labels(repo: str, labels_block: list[dict]) -> bool:
+    """Re-read the labels and confirm each one exists.
+
+    Presence is the whole assertion — this only ever creates — so checking
+    presence checks everything claimed. (Contrast `verify_ruleset`, where the
+    rules are the substance and go unchecked: https://github.com/swimblocks/.github/issues/45)
+    """
+    if not labels_block:
+        return True
+    try:
+        actual = list_labels(repo)
+    except subprocess.CalledProcessError as e:
+        print(f"  FAIL labels: could not list (exit {e.returncode})")
+        return False
+
+    ok = True
+    for desired in labels_block:
+        name = desired.get("name")
+        if not name:
+            continue
+        if name.lower() in actual:
+            print(f"  OK  label '{name}': present")
+        else:
+            print(f"  FAIL label '{name}': missing")
+            ok = False
     return ok
 
 
@@ -225,6 +321,7 @@ def main(argv: list[str]) -> int:
     args = patch_args(repo_block)
 
     rulesets_block = settings.get("rulesets") or []
+    labels_block = settings.get("labels") or []
 
     failures: list[str] = []
     for repo in argv[1:]:
@@ -232,6 +329,12 @@ def main(argv: list[str]) -> int:
         apply(repo, args)
         if not verify(repo, repo_block):
             failures.append(repo)
+
+        # Labels do not depend on visibility — private repos get them too.
+        if labels_block:
+            apply_labels(repo, labels_block)
+            if not verify_labels(repo, labels_block) and repo not in failures:
+                failures.append(repo)
 
         is_public = get_repo_visibility(repo) == "public"
 

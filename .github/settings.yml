@@ -24,12 +24,10 @@ repository:
   delete_branch_on_merge: true
   allow_update_branch: true
 
-# Labels that should exist in every repo.
-#
-# NOT YET APPLIED. `apply-settings.py` acts on `repository`, `branches` and `rulesets`
-# only, so these labels are still created per repo by hand with `gh label create`. This
-# block is the canonical set; teaching the reconciler to apply it is the remaining work on
-# https://github.com/swimblocks/.github/issues/46, which stays open until it lands.
+# Labels that should exist in every repo. Created when missing and then left alone —
+# the values here seed a new label, they don't govern an existing one. Labels not
+# listed are untouched: repos carry GitHub's defaults and Dependabot's too, and
+# deleting a label strips it from every issue and PR that used it.
 labels:
   - name: no-issue
     color: ededed

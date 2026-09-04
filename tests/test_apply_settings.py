@@ -84,3 +84,52 @@ class TestFlattenProtection:
     def test_output_always_covers_every_protection_key(self):
         flat = apply_settings._flatten_protection({})
         assert set(flat) == apply_settings.PROTECTION_KEYS
+
+
+class TestNormalizeColor:
+    def test_strips_leading_hash(self):
+        assert apply_settings.normalize_color("#EDEDED") == "ededed"
+
+    def test_lowercases(self):
+        assert apply_settings.normalize_color("A2EEEF") == "a2eeef"
+
+    def test_already_normal_is_unchanged(self):
+        assert apply_settings.normalize_color("ededed") == "ededed"
+
+    def test_none_becomes_empty(self):
+        assert apply_settings.normalize_color(None) == ""
+
+
+class TestMissingLabels:
+    _DESIRED = [
+        {"name": "no-issue", "color": "ededed", "description": "Skips the issue"},
+    ]
+
+    def test_absent_label_is_reported(self):
+        assert apply_settings.missing_labels(self._DESIRED, {}) == self._DESIRED
+
+    def test_present_label_is_not_reported(self):
+        actual = {"no-issue": {"color": "ededed", "description": "Skips the issue"}}
+        assert apply_settings.missing_labels(self._DESIRED, actual) == []
+
+    def test_name_match_is_case_insensitive(self):
+        # GitHub label names are case-insensitive, so a differently-cased
+        # label on the repo must not read as missing.
+        actual = {"no-issue": {"color": "ededed"}}
+        desired = [{"name": "No-Issue", "color": "ededed"}]
+        assert apply_settings.missing_labels(desired, actual) == []
+
+    def test_drifted_colour_is_not_treated_as_missing(self):
+        # Existing labels are left alone; only absence is acted on.
+        actual = {"no-issue": {"color": "ff0000", "description": "something else"}}
+        assert apply_settings.missing_labels(self._DESIRED, actual) == []
+
+    def test_entry_without_a_name_is_skipped(self):
+        assert apply_settings.missing_labels([{"color": "ededed"}], {}) == []
+
+    def test_only_the_absent_entries_are_returned(self):
+        desired = [{"name": "no-issue"}, {"name": "needs-decision"}]
+        actual = {"no-issue": {"color": "ededed"}}
+        assert apply_settings.missing_labels(desired, actual) == [
+            {"name": "needs-decision"},
+        ]
