@@ -47,7 +47,12 @@ gcloud auth application-default login
 For **every** change:
 
 1. **Open a GitHub issue first.** Describe the change. This is the unit of work.
-2. **Branch** off `main`, named `<issue-number>-<short-slug>`.
+   - *Exception:* a change small enough to explain itself — a typo, a doc clarification,
+     recording a decision already made — may go straight to a PR. Label it `no-issue` and
+     end the description with `NO-ISSUE: <short reason>`. Use a real issue whenever the
+     change needs discussion or has acceptance criteria.
+2. **Branch** off `main`, named `<issue-number>-<short-slug>` (or a descriptive slug, for a
+   `no-issue` PR).
 3. **Make focused commits.** Coherent, single-purpose. Run `ruff check .` and `pytest -q`
    locally before pushing.
 4. **Hand off for local review — do not open the PR.** Nobody opens a pull request carrying
