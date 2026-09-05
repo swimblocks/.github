@@ -159,3 +159,47 @@ class TestGhError:
 
     def test_blank_lines_are_not_mistaken_for_a_message(self):
         assert apply_settings.gh_error(self._err("\n  \n")) == " (exit 1)"
+
+
+class TestSummaryTable:
+    def test_lists_every_repo_with_the_version(self):
+        table = apply_settings.summary_table(
+            "settings-2026-09-08", ["swimblocks/a", "swimblocks/b"], []
+        )
+        assert "## Settings rollout — `settings-2026-09-08`" in table
+        assert "| `swimblocks/a` | OK — applied | `settings-2026-09-08` |" in table
+        assert "| `swimblocks/b` | OK — applied | `settings-2026-09-08` |" in table
+
+    def test_marks_only_the_failed_repos(self):
+        table = apply_settings.summary_table(
+            "settings-2026-09-08", ["swimblocks/a", "swimblocks/b"], ["swimblocks/b"]
+        )
+        assert "| `swimblocks/a` | OK — applied |" in table
+        assert "| `swimblocks/b` | FAIL — drift remains |" in table
+
+    def test_unversioned_run_still_renders(self):
+        # create-repo.sh and a local run pass no --version.
+        table = apply_settings.summary_table("", ["swimblocks/a"], [])
+        assert "## Settings rollout\n" in table
+        assert "| `swimblocks/a` | OK — applied | `unversioned` |" in table
+
+    def test_no_repos_leaves_a_header_only_table(self):
+        table = apply_settings.summary_table("settings-2026-09-08", [], [])
+        assert table.rstrip().endswith("|---|---|---|")
+
+
+class TestParseArgs:
+    def test_repos_only(self):
+        opts = apply_settings.parse_args(["swimblocks/a", "swimblocks/b"])
+        assert opts.repos == ["swimblocks/a", "swimblocks/b"]
+        assert opts.version == ""
+        assert opts.summary_file is None
+
+    def test_version_and_summary_file(self):
+        opts = apply_settings.parse_args(
+            ["--version", "settings-2026-09-08",
+             "--summary-file", "out.md", "swimblocks/a"]
+        )
+        assert opts.version == "settings-2026-09-08"
+        assert opts.summary_file == "out.md"
+        assert opts.repos == ["swimblocks/a"]

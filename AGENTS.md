@@ -127,9 +127,14 @@ Reference implementation:
 ## 8. Creating a new repo
 
 Use [`scripts/create-repo.sh`](scripts/create-repo.sh) — **never** the GitHub UI. It applies
-the canonical settings from [`.github/settings.yml`](.github/settings.yml) automatically.
-Drift on existing repos is healed by the scheduled
-[`reconcile-repo-defaults.yml`](.github/workflows/reconcile-repo-defaults.yml) workflow.
+the canonical settings from [`.github/settings.yml`](.github/settings.yml) automatically, and
+tells you the `ghq get` line to clone it into the standard local layout.
+
+Settings ship as a weekly release: [`release.yml`](.github/workflows/release.yml) publishes a
+`settings-YYYY-MM-DD` tag and [`rollout.yml`](.github/workflows/rollout.yml) applies it to every
+repo in the org, which is also what heals drift made through the GitHub UI. A repo created
+outside `create-repo.sh` is picked up by the `repo-created` dispatch, or by the next rollout.
+See [`docs/reconciler.md`](docs/reconciler.md).
 
 ## 9. Other agent-specific files
 

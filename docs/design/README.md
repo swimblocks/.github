@@ -13,3 +13,4 @@ sequential, never reused.
 |---|---|---|
 | [0001](0001-github-app-reconciler.md) | GitHub App authentication for the reconciler workflow | implemented |
 | [0002](0002-venv-standard.md) | venv standard + devcontainer provisioning | implemented |
+| [0003](0003-settings-releases-and-rollout.md) | Settings as a versioned release, rolled out weekly | implemented |

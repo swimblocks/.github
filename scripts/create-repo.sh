@@ -51,6 +51,7 @@ python "$SCRIPT_DIR/apply-settings.py" "$REPO"
 
 echo
 echo "Done. $REPO is live with org-wide defaults."
+echo "Clone it into the standard local layout: ghq get https://github.com/$REPO"
 echo "Next: add per-repo CI (uses: swimblocks/.github/.github/workflows/reusable-python-ci.yml@main),"
 echo "      add a per-repo .github/dependabot.yml, draft an AGENTS.md."
 echo "When ready to release publicly: scripts/make-public.sh $REPO"

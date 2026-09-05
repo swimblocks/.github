@@ -1,0 +1,59 @@
+name: release
+
+# Publishes the weekly settings release: a dated tag pinning `.github/settings.yml`
+# and `scripts/apply-settings.py` at the version the org is on.
+#
+# The release also keeps this repo's scheduled workflows alive. GitHub disables a
+# scheduled workflow in a public repo after 60 days without repository *activity*,
+# and workflow runs are not activity — the reconciler this replaces ran every
+# Monday through its quiet window and was disabled anyway, because its whole
+# effect was on other repositories. A published release is an event in this repo,
+# so a weekly cadence keeps the clock reset regardless of how quiet the org is.
+#
+# See https://github.com/swimblocks/.github/issues/34 and
+# docs/design/0003-settings-releases-and-rollout.md.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write   # create the tag and the release
+  actions: write    # dispatch rollout.yml
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the settings release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="settings-$(date -u +'%Y-%m-%d')"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$tag is already published; rolling it out again."
+          else
+            gh release create "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Settings $(date -u +'%B %-d, %Y')" \
+              --generate-notes
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # rollout.yml also triggers on `release: published`, which covers a release
+      # cut by hand. It cannot cover this one: an event raised by GITHUB_TOKEN
+      # does not start another workflow run, so without this step the weekly
+      # release would publish and nothing would apply it.
+      - name: Roll it out
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh workflow run rollout.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "${GITHUB_REF_NAME}" \
+            --raw-field "tag=$TAG"
