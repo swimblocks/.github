@@ -9,6 +9,7 @@ run in CI without credentials.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 from pathlib import Path
 
 _MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "apply-settings.py"
@@ -133,3 +134,28 @@ class TestMissingLabels:
         assert apply_settings.missing_labels(desired, actual) == [
             {"name": "needs-decision"},
         ]
+
+
+class TestGhError:
+    def _err(self, stderr, returncode=1):
+        return subprocess.CalledProcessError(returncode, ["gh"], stderr=stderr)
+
+    def test_uses_the_gh_message(self):
+        # The 403 that cost an afternoon of diagnosis on 2026-09-05.
+        err = self._err("gh: Resource not accessible by integration (HTTP 403)\n")
+        assert apply_settings.gh_error(err) == (
+            ": gh: Resource not accessible by integration (HTTP 403)"
+        )
+
+    def test_keeps_only_the_last_line(self):
+        err = self._err("some preamble\nmore noise\ngh: Not Found (HTTP 404)\n")
+        assert apply_settings.gh_error(err) == ": gh: Not Found (HTTP 404)"
+
+    def test_falls_back_to_the_exit_code_when_stderr_is_empty(self):
+        assert apply_settings.gh_error(self._err("", returncode=2)) == " (exit 2)"
+
+    def test_falls_back_when_stderr_is_none(self):
+        assert apply_settings.gh_error(self._err(None)) == " (exit 1)"
+
+    def test_blank_lines_are_not_mistaken_for_a_message(self):
+        assert apply_settings.gh_error(self._err("\n  \n")) == " (exit 1)"

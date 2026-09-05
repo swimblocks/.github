@@ -50,6 +50,18 @@ def load_settings(path: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
+def gh_error(exc: subprocess.CalledProcessError) -> str:
+    """The message `gh` produced, for appending to a failure line.
+
+    These calls capture stderr, so without this the cause is thrown away and
+    the operator gets a bare exit code — see
+    https://github.com/swimblocks/.github/issues/49. Only the last stderr line
+    is kept: that is the `gh: ... (HTTP 403)` summary, not the noise above it.
+    """
+    lines = [ln for ln in (exc.stderr or "").strip().splitlines() if ln.strip()]
+    return f": {lines[-1].strip()}" if lines else f" (exit {exc.returncode})"
+
+
 def patch_args(repo_block: dict) -> list[str]:
     """Translate the `repository:` block into `gh api -F/-f` flags."""
     args: list[str] = []
@@ -136,7 +148,7 @@ def apply_labels(repo: str, labels_block: list[dict]) -> bool:
     try:
         actual = list_labels(repo)
     except subprocess.CalledProcessError as e:
-        print(f"  FAIL labels: could not list (exit {e.returncode})")
+        print(f"  FAIL labels: could not list{gh_error(e)}")
         return False
 
     ok = True
@@ -152,7 +164,7 @@ def apply_labels(repo: str, labels_block: list[dict]) -> bool:
             )
             print(f"  OK  label '{name}': created")
         except subprocess.CalledProcessError as e:
-            print(f"  FAIL label '{name}': create failed (exit {e.returncode})")
+            print(f"  FAIL label '{name}': create failed{gh_error(e)}")
             ok = False
     return ok
 
@@ -169,7 +181,7 @@ def verify_labels(repo: str, labels_block: list[dict]) -> bool:
     try:
         actual = list_labels(repo)
     except subprocess.CalledProcessError as e:
-        print(f"  FAIL labels: could not list (exit {e.returncode})")
+        print(f"  FAIL labels: could not list{gh_error(e)}")
         return False
 
     ok = True
@@ -332,8 +344,12 @@ def main(argv: list[str]) -> int:
 
         # Labels do not depend on visibility — private repos get them too.
         if labels_block:
-            apply_labels(repo, labels_block)
-            if not verify_labels(repo, labels_block) and repo not in failures:
+            # Verify only if applying got far enough to be worth checking —
+            # otherwise a failed listing is reported twice for one failure.
+            labels_ok = apply_labels(repo, labels_block)
+            if labels_ok:
+                labels_ok = verify_labels(repo, labels_block)
+            if not labels_ok and repo not in failures:
                 failures.append(repo)
 
         is_public = get_repo_visibility(repo) == "public"
@@ -349,8 +365,8 @@ def main(argv: list[str]) -> int:
                         if repo not in failures:
                             failures.append(repo)
                 except subprocess.CalledProcessError as e:
-                    print(f"  SKIP ruleset '{ruleset.get('name')}': apply failed "
-                          f"(exit {e.returncode}).")
+                    print(f"  SKIP ruleset '{ruleset.get('name')}': apply failed"
+                          f"{gh_error(e)}")
                     if repo not in failures:
                         failures.append(repo)
             for entry in branches_block:
