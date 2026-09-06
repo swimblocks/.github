@@ -89,6 +89,16 @@ The alternative considered and dropped was for `release.yml` to dispatch the rol
 all, but leaves `rollout.yml` carrying two trigger paths where only one ever fires automatically,
 and it needs `actions: write` on the workflow token.
 
+### Release contents
+
+The release is a tag and generated notes, with no attached asset. The tag already addresses the
+exact file — `git show <tag>:.github/settings.yml`, or the contents API with `?ref=<tag>` — and
+`rollout.yml` reads it by checking the tag out. An asset would earn its place only if something
+outside git needed `settings.yml` by URL, which nothing does.
+
+(Contrast `swim-club-tech-survey`, which attaches its results CSV: there the file is the product
+people come to the release page to download.)
+
 ### Version traceability
 
 Nothing on a repo records which settings version it is on, which is why `officials-admin` could
@@ -124,7 +134,6 @@ custom properties carrying `settings_version`, queryable org-wide — is tracked
   [#53](https://github.com/swimblocks/.github/issues/53). Would turn "which repos are behind"
   into a single org-wide query. Custom properties are available on this org; what the issue has
   to settle is whether `swimblocks-reconciler` should hold the permission to write them.
-- **`settings.yml` as a release asset.** The tag already pins it; an asset is convenience only.
 - **Failure policy on rollout.** `apply-settings.py` accumulates failures and exits non-zero at
   the end rather than stopping at the first bad repo. That is deliberate for a rollout across
   many repos — one repo's 403 must not strand the rest — and is recorded here as the intended
