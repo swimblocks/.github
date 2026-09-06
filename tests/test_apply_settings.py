@@ -9,6 +9,7 @@ run in CI without credentials.
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 from pathlib import Path
 
@@ -16,6 +17,9 @@ _MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "apply-settings
 _spec = importlib.util.spec_from_file_location("apply_settings", _MODULE_PATH)
 apply_settings = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(apply_settings)
+
+# A representative release tag, the shape release.yml publishes.
+TAG = "settings-2026-09-08"
 
 
 class TestPatchArgs:
@@ -236,3 +240,61 @@ class TestStderrIsCaptured:
         calls = self._calls(monkeypatch)
         apply_settings.apply_ruleset("swimblocks/x", {"name": "swimblocks-default"})
         assert calls[-1][1]["stderr"] is subprocess.PIPE
+
+    def test_set_settings_version_captures_stderr(self, monkeypatch):
+        calls = self._calls(monkeypatch)
+        apply_settings.set_settings_version("swimblocks/x", "settings-2026-09-08")
+        assert calls[-1][1]["stderr"] is subprocess.PIPE
+
+
+class TestVersionPayload:
+    def test_names_the_property_and_the_tag(self):
+        assert apply_settings.version_payload("settings-2026-09-08") == {
+            "properties": [
+                {"property_name": "settings_version", "value": "settings-2026-09-08"}
+            ]
+        }
+
+    def test_property_name_matches_the_documented_one(self):
+        # docs/reconciler.md's drift query selects on this exact string, and the
+        # org-level definition is created by hand — a rename here silently stops
+        # the query matching rather than failing anything.
+        assert apply_settings.SETTINGS_VERSION_PROPERTY == "settings_version"
+
+
+class TestSetSettingsVersion:
+    def _patch_run(self, monkeypatch, result):
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append((cmd, kwargs))
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        monkeypatch.setattr(apply_settings.subprocess, "run", fake_run)
+        return calls
+
+    def test_patches_the_repo_properties_endpoint(self, monkeypatch):
+        calls = self._patch_run(
+            monkeypatch, subprocess.CompletedProcess(["gh"], 0, stdout="")
+        )
+        assert apply_settings.set_settings_version("swimblocks/x", TAG)
+        cmd, kwargs = calls[-1]
+        assert cmd[:5] == [
+            "gh", "api", "-X", "PATCH", "repos/swimblocks/x/properties/values"
+        ]
+        assert json.loads(kwargs["input"]) == apply_settings.version_payload(TAG)
+
+    def test_failure_is_reported_and_returns_false(self, monkeypatch, capsys):
+        # A 422 is the shape seen when settings_version isn't defined on the org.
+        self._patch_run(
+            monkeypatch,
+            subprocess.CalledProcessError(
+                1, ["gh"], stderr="gh: Invalid property name (HTTP 422)\n"
+            ),
+        )
+        assert not apply_settings.set_settings_version("swimblocks/x", TAG)
+        out = capsys.readouterr().out
+        assert "FAIL settings_version" in out
+        assert "(HTTP 422)" in out

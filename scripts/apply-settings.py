@@ -9,13 +9,15 @@ creation time.
 Usage:
     python scripts/apply-settings.py owner/repo [owner/repo ...]
 
-Inside the rollout workflow, which records the version in the job summary:
+Inside the rollout workflow, where --version both records the tag on each repo
+as the `settings_version` custom property and names it in the job summary:
 
     python scripts/apply-settings.py --version TAG --summary-file FILE owner/repo
 
 Requires the `gh` CLI authenticated with a token that has admin rights on the
-target repo(s). Inside the rollout workflow that is a GitHub App installation
-token; locally it is your usual `gh auth login`.
+target repo(s), plus Custom properties write to record the version. Inside the
+rollout workflow that is a GitHub App installation token; locally it is your
+usual `gh auth login`.
 """
 
 from __future__ import annotations
@@ -329,6 +331,60 @@ def verify_branch_protection(repo: str, branch: str, protection: dict) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Settings version
+#
+# The run summary below says what one rollout did. The custom property says what
+# state a repo is *in*, which is the question the summary can't answer: with a
+# value on every repo, "which repos are behind" is one org-wide query rather than
+# a trawl through run logs. See https://github.com/swimblocks/.github/issues/53.
+#
+# `PATCH /repos/{owner}/{repo}/properties/values` is the only endpoint the
+# repository-level "Custom properties" permission grants, which is why the write
+# goes per repo rather than through `PATCH /orgs/{org}/properties/values`: the
+# org-level equivalent rides on the *organization* Custom properties permission,
+# which also carries the schema — create, update and delete of every property
+# definition in the org. The narrow grant is worth the extra calls.
+#
+# The property must already be defined at org level; defining it is a one-time
+# org-owner action, deliberately not something this token can do. Until it is,
+# every write 422s and the run goes red — which is the right signal, since
+# neither that nor a missing permission is a state to sit in. Runbook and the
+# drift query: docs/reconciler.md.
+# ---------------------------------------------------------------------------
+
+SETTINGS_VERSION_PROPERTY = "settings_version"
+
+
+def version_payload(version: str) -> dict:
+    """The PATCH body recording *version* against SETTINGS_VERSION_PROPERTY."""
+    return {
+        "properties": [
+            {"property_name": SETTINGS_VERSION_PROPERTY, "value": version}
+        ]
+    }
+
+
+def set_settings_version(repo: str, version: str) -> bool:
+    """Record *version* on *repo*. Returns False on failure."""
+    try:
+        subprocess.run(
+            ["gh", "api", "-X", "PATCH", f"repos/{repo}/properties/values",
+             "--input", "-"],
+            input=json.dumps(version_payload(version)), text=True,
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError as e:
+        # Two causes, and gh's own message separates them: a 422 means
+        # `settings_version` isn't defined on the org yet, a 403 means this
+        # token lacks Custom properties write. Both are setup gaps, so both
+        # count as failures rather than being skipped.
+        print(f"  FAIL {SETTINGS_VERSION_PROPERTY}: PATCH failed{gh_error(e)}")
+        return False
+    print(f"  OK  {SETTINGS_VERSION_PROPERTY}: {version}")
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Run summary
 #
 # Nothing on a repo records which settings version it is on, so a rollout leaves
@@ -356,7 +412,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("repos", nargs="+", metavar="owner/repo")
     parser.add_argument(
         "--version", default="",
-        help="Settings release tag being rolled out, recorded in the summary.",
+        help="Settings release tag being rolled out. Recorded on each repo as "
+             "the settings_version custom property, and named in the summary.",
     )
     parser.add_argument(
         "--summary-file",
@@ -447,6 +504,21 @@ def main(argv: list[str]) -> int:
                 if not verify_branch_protection(repo, branch, protection):
                     if repo not in failures:
                         failures.append(repo)
+
+        # Last, and only for a repo that came through clean: the value means
+        # "this repo was taken through the whole of settings.yml at this tag",
+        # so a repo that still has drift must not claim it. Leaving it unstamped
+        # is what keeps it in the drift query's output until someone fixes it.
+        #
+        # Without --version there is no release to name — create-repo.sh applies
+        # whatever is on main, and claiming a tag for that would be a lie. Such a
+        # repo gets its value from the rollout its repo-created dispatch starts.
+        if opts.version:
+            if repo in failures:
+                print(f"  SKIP {SETTINGS_VERSION_PROPERTY}: not recorded, "
+                      f"drift remains above")
+            elif not set_settings_version(repo, opts.version):
+                failures.append(repo)
 
     if opts.summary_file:
         with open(opts.summary_file, "a", encoding="utf-8") as f:
