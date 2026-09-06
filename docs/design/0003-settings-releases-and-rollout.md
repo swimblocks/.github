@@ -98,8 +98,8 @@ leaves a table of repo → result → version. The release page plus the run his
 trail.
 
 That answers "what did this run do", not "which repos are behind". The stronger form — repository
-custom properties carrying `settings_version`, queryable org-wide — needs org-level property
-definitions and is left open below.
+custom properties carrying `settings_version`, queryable org-wide — is tracked separately in
+[#53](https://github.com/swimblocks/.github/issues/53).
 
 ## Verification
 
@@ -120,8 +120,10 @@ definitions and is left open below.
 
 ## Open items
 
-- **Repository custom properties for `settings_version`.** Would turn "which repos are behind"
-  into a single org-wide query. Needs the property defined at org level first.
+- **Repository custom properties for `settings_version`** —
+  [#53](https://github.com/swimblocks/.github/issues/53). Would turn "which repos are behind"
+  into a single org-wide query. Custom properties are available on this org; what the issue has
+  to settle is whether `swimblocks-reconciler` should hold the permission to write them.
 - **`settings.yml` as a release asset.** The tag already pins it; an asset is convenience only.
 - **Failure policy on rollout.** `apply-settings.py` accumulates failures and exits non-zero at
   the end rather than stopping at the first bad repo. That is deliberate for a rollout across
