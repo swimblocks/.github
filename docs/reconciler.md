@@ -180,12 +180,24 @@ app holds values write, not schema admin:
 ```bash
 gh api -X PUT orgs/swimblocks/properties/schema/settings_version \
   -f value_type=string \
-  -f description='The settings-YYYY-MM-DD release this repo was last reconciled against.' \
-  -F required=false
+  -f description='Version of org-wide settings last synced from swimblocks/.github' \
+  -F required=false \
+  -f values_editable_by=org_and_repo_actors
 ```
 
 `required=false` and **no default value**: a default is reported for every repo whether or not it
 was ever reconciled, which would turn the query below into a false all-clear.
+
+`values_editable_by` is the one that decides whether the rollout works at all, and it defaults to
+`org_actors` — org owners and property managers only. The reconciler holds the *repository*
+Custom properties permission and writes through the *repository* endpoint, so it acts as a repo
+actor and that default shuts it out. `org_and_repo_actors` also lets a repo admin set the value by
+hand, which is the cost: the property is a claim the rollout makes, and a hand-set value is a claim
+nothing verified. Check it with:
+
+```bash
+gh api orgs/swimblocks/properties/schema/settings_version --jq .values_editable_by
+```
 
 **Which repos are behind:**
 
@@ -232,5 +244,5 @@ If the key is compromised or expiring:
 | `release.yml` state is `disabled_inactivity` | Re-enable with `gh workflow enable release.yml -R swimblocks/.github`. Activity alone never re-enables a workflow. |
 | Ruleset apply fails on a public repo | App lacks Administration write, or the ruleset payload in `settings.yml` is malformed. |
 | `FAIL settings_version` with `(HTTP 422)` on every repo | The property isn't defined on the org yet — see [The `settings_version` property](#the-settings_version-property). |
-| `FAIL settings_version` with `(HTTP 403)` | `swimblocks-reconciler` lacks Custom properties write, or the permission was added but the installation request hasn't been accepted. |
+| `FAIL settings_version` with `(HTTP 403)` | One of three: `swimblocks-reconciler` lacks Custom properties write; the permission was added but the installation request hasn't been accepted; or the property's `values_editable_by` is `org_actors`, which locks out the repository endpoint the app writes through. |
 | The drift query lists a repo the rollout reported OK | The rollout ran before the property existed, or from a tag predating it. Re-run `rollout.yml`. |
