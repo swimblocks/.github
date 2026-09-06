@@ -58,10 +58,13 @@ def load_settings(path: Path) -> dict:
 def gh_error(exc: subprocess.CalledProcessError) -> str:
     """The message `gh` produced, for appending to a failure line.
 
-    These calls capture stderr, so without this the cause is thrown away and
-    the operator gets a bare exit code — see
-    https://github.com/swimblocks/.github/issues/49. Only the last stderr line
-    is kept: that is the `gh: ... (HTTP 403)` summary, not the noise above it.
+    Every call whose failure is reported through this must pass
+    `stderr=subprocess.PIPE`; otherwise the cause is thrown away and the
+    operator gets a bare exit code — see
+    https://github.com/swimblocks/.github/issues/49. Capturing also keeps gh's
+    unbuffered stderr out of the log, where it would otherwise appear seconds
+    ahead of the buffered stdout line that explains it. Only the last stderr
+    line is kept: that is the `gh: ... (HTTP 403)` summary, not the noise above.
     """
     lines = [ln for ln in (exc.stderr or "").strip().splitlines() if ln.strip()]
     return f": {lines[-1].strip()}" if lines else f" (exit {exc.returncode})"
@@ -242,7 +245,8 @@ def apply_ruleset(repo: str, ruleset: dict) -> None:
                f"repos/{repo}/rulesets",
                "--input", "-"]
     subprocess.run(cmd, input=json.dumps(ruleset), text=True,
-                   check=True, stdout=subprocess.DEVNULL)
+                   check=True, stdout=subprocess.DEVNULL,
+                   stderr=subprocess.PIPE)
 
 
 def verify_ruleset(repo: str, ruleset_name: str) -> bool:
@@ -272,7 +276,8 @@ def apply_branch_protection(repo: str, branch: str, protection: dict) -> None:
            f"repos/{repo}/branches/{branch}/protection",
            "--input", "-"]
     subprocess.run(cmd, input=json.dumps(payload), text=True,
-                   check=True, stdout=subprocess.DEVNULL)
+                   check=True, stdout=subprocess.DEVNULL,
+                   stderr=subprocess.PIPE)
 
 
 def _flatten_protection(actual: dict) -> dict:
@@ -429,10 +434,15 @@ def main(argv: list[str]) -> int:
                     # failure — the repo stays aligned on every merge-method
                     # field. Skip without failing the run. (If the plan is later
                     # upgraded, the PUT succeeds and verify below applies.)
-                    print(f"  SKIP branches.{branch}: PUT failed "
-                          f"(exit {e.returncode}). "
-                          f"Expected for a private repo on a plan without branch "
-                          f"protection; merge-method settings above still applied.")
+                    #
+                    # Report gh's own message rather than asserting the cause:
+                    # a 403 from the token lacking Administration write looks
+                    # identical from here, and claiming the plan limitation for
+                    # it would send the reader down the wrong path.
+                    print(f"  SKIP branches.{branch}: PUT failed{gh_error(e)}. "
+                          f"Merge-method settings above still applied. The Pro/"
+                          f"visibility 403 is the expected plan limit on a "
+                          f"private repo; any other error is not.")
                     continue
                 if not verify_branch_protection(repo, branch, protection):
                     if repo not in failures:

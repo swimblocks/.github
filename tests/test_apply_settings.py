@@ -203,3 +203,36 @@ class TestParseArgs:
         assert opts.version == "settings-2026-09-08"
         assert opts.summary_file == "out.md"
         assert opts.repos == ["swimblocks/a"]
+
+
+class TestStderrIsCaptured:
+    """A call reported through `gh_error` has to capture stderr.
+
+    Without it `gh_error` can only ever print a bare exit code, and gh's
+    unbuffered stderr lands in the log seconds ahead of the buffered line that
+    explains it — which is how two `(HTTP 403)` lines came to look like
+    unexplained failures in the 2026-09-06 rollout.
+    """
+
+    def _calls(self, monkeypatch):
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append((cmd, kwargs))
+            # Enough for list_rulesets to parse on the way through.
+            return subprocess.CompletedProcess(cmd, 0, stdout="[]")
+
+        monkeypatch.setattr(apply_settings.subprocess, "run", fake_run)
+        return calls
+
+    def test_apply_branch_protection_captures_stderr(self, monkeypatch):
+        calls = self._calls(monkeypatch)
+        apply_settings.apply_branch_protection(
+            "swimblocks/x", "main", {"enforce_admins": False}
+        )
+        assert calls[-1][1]["stderr"] is subprocess.PIPE
+
+    def test_apply_ruleset_captures_stderr(self, monkeypatch):
+        calls = self._calls(monkeypatch)
+        apply_settings.apply_ruleset("swimblocks/x", {"name": "swimblocks-default"})
+        assert calls[-1][1]["stderr"] is subprocess.PIPE
