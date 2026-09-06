@@ -91,8 +91,17 @@ Perform once (or when recreating the app from scratch). Requires org-owner acces
    - `APP_ID` = the Client ID from step 3
    - `APP_PRIVATE_KEY` = full contents of the `.pem` from step 4
 7. Delete the local `.pem` file once stored as the secret.
-8. Trigger `rollout.yml` via `workflow_dispatch` — that is the workflow this app authenticates —
-   and confirm the `create-github-app-token` and `Apply settings` steps both pass.
+8. Check it works. `rollout.yml` is the workflow that uses this app, so run it:
+
+   ```bash
+   gh workflow run rollout.yml -R swimblocks/.github
+   gh run list -R swimblocks/.github --workflow rollout.yml --limit 1
+   ```
+
+   **Looking for:** that run goes green, with the `create-github-app-token` and
+   `Apply settings to every repo in swimblocks` steps both passing (`gh run view <id>`, or the
+   Actions tab). If the first step fails, the secrets are wrong or the app isn't installed — see
+   Troubleshooting.
 
 ## Setup / recreate `swimblocks-releaser`
 
@@ -114,9 +123,22 @@ Same shape, narrower scope. `release.yml` fails at its first step until this exi
    - `RELEASE_APP_ID` = the Client ID from step 3
    - `RELEASE_APP_PRIVATE_KEY` = full contents of the `.pem` from step 4
 7. Delete the local `.pem` file once stored as the secret.
-8. Trigger `release.yml` via `workflow_dispatch` and confirm it publishes a `settings-YYYY-MM-DD`
-   release **and** that a `rollout.yml` run starts behind it. A release with no rollout behind it
-   means the App token was not the one that published it.
+8. Check it works. `release.yml` is the workflow that uses this app, so run it:
+
+   ```bash
+   gh workflow run release.yml -R swimblocks/.github
+   ```
+
+   **Looking for two things**, roughly a minute apart:
+
+   ```bash
+   gh release list -R swimblocks/.github --limit 1          # a settings-YYYY-MM-DD release
+   gh run list -R swimblocks/.github --workflow rollout.yml --limit 1
+   ```
+
+   The release must be there **and** a `rollout.yml` run must have started behind it. A release
+   with no rollout behind it means the release was not published with the App token — that is
+   the whole reason this app exists.
 
 ## Rotate a private key
 
