@@ -107,15 +107,33 @@ sit unreconciled without anyone noticing. `apply-settings.py` gains `--version` 
 leaves a table of repo → result → version. The release page plus the run history become the audit
 trail.
 
-That answers "what did this run do", not "which repos are behind". The stronger form — repository
-custom properties carrying `settings_version`, queryable org-wide — is tracked separately in
-[#53](https://github.com/swimblocks/.github/issues/53).
+That answers "what did this run do". It does not answer "which repos are behind", which needs
+state on the repo rather than in a run log. So the rollout also stamps the tag onto each repo as
+the `settings_version` repository custom property, and
+`GET /orgs/swimblocks/properties/values` answers the question in one call
+([#53](https://github.com/swimblocks/.github/issues/53); the query is in
+[`docs/reconciler.md`](../reconciler.md#the-settings_version-property)).
+
+The write goes per repo, through `PATCH /repos/{owner}/{repo}/properties/values`. That endpoint is
+the entirety of what the repository-level Custom properties permission grants, so the reconciler
+gains one narrow capability and nothing else. The org-level `PATCH /orgs/{org}/properties/values`
+would do all seven repos in a single call, but it rides on the *organization* Custom properties
+permission, which also carries create, update and delete of every property definition in the org —
+the same test that put the releaser in its own app rather than widening the reconciler.
+
+Defining `settings_version` stays an org-owner action, outside what either app can do. Until it
+exists the write 422s and the rollout goes red on every repo; that is the intended signal, since
+neither a missing definition nor a missing permission is a state to sit in. The property carries no
+default value, because a default would be reported for repos that were never reconciled and read
+as an all-clear.
 
 ## Verification
 
 - `release.yml` run publishes `settings-YYYY-MM-DD` and a `rollout.yml` run appears behind it.
   A release with no rollout behind it means the release was cut with `GITHUB_TOKEN`, not the App.
-- The rollout's job summary lists every repo in the org against the released tag.
+- The rollout's job summary lists every repo in the org against the released tag, and the drift
+  query in [`docs/reconciler.md`](../reconciler.md#the-settings_version-property) returns nothing
+  afterwards.
 - `gh api repos/swimblocks/.github/actions/workflows/<release id> -q .state` stays `active`
   across a quiet stretch longer than 60 days.
 - A `repo-created` `repository_dispatch` starts a rollout.
@@ -125,15 +143,12 @@ custom properties carrying `settings_version`, queryable org-wide — is tracked
 ### Prerequisite
 
 `release.yml` fails at its first step until `swimblocks-releaser` exists and
-`RELEASE_APP_ID` / `RELEASE_APP_PRIVATE_KEY` are set on `swimblocks/.github`. The runbook is in
-[`docs/reconciler.md`](../reconciler.md).
+`RELEASE_APP_ID` / `RELEASE_APP_PRIVATE_KEY` are set on `swimblocks/.github`. `rollout.yml` fails
+on every repo until `settings_version` is defined on the org and `swimblocks-reconciler` holds
+Custom properties write. Both runbooks are in [`docs/reconciler.md`](../reconciler.md).
 
 ## Open items
 
-- **Repository custom properties for `settings_version`** —
-  [#53](https://github.com/swimblocks/.github/issues/53). Would turn "which repos are behind"
-  into a single org-wide query. Custom properties are available on this org; what the issue has
-  to settle is whether `swimblocks-reconciler` should hold the permission to write them.
 - **Failure policy on rollout.** `apply-settings.py` accumulates failures and exits non-zero at
   the end rather than stopping at the first bad repo. That is deliberate for a rollout across
   many repos — one repo's 403 must not strand the rest — and is recorded here as the intended
