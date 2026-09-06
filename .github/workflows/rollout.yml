@@ -29,6 +29,11 @@ on:
   # for the next weekly release.
   repository_dispatch:
     types: [repo-created]
+  # TEMPORARY — remove before merging #51, together with the matching block in
+  # the resolve step below. `workflow_dispatch` only lists workflows already on
+  # `main`, so this is the only way to exercise this workflow from the PR branch.
+  push:
+    branches: [34-settings-release-and-rollout]
 
 permissions:
   contents: read   # read the release and check out its tag
@@ -46,6 +51,12 @@ jobs:
         run: |
           set -euo pipefail
           tag="${RELEASE_TAG:-${INPUT_TAG:-}}"
+          # TEMPORARY — remove before merging #51, with the `push:` trigger above.
+          # A push-triggered test run has no release to name, so roll out the
+          # commit that was pushed.
+          if [ -z "$tag" ] && [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            tag="$GITHUB_SHA"
+          fi
           if [ -z "$tag" ]; then
             tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName) || {
               echo "::error::No settings release to roll out — run the release workflow first."
