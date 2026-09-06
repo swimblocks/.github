@@ -30,8 +30,11 @@ through the GitHub UI is put back. It triggers:
 
 It carries no `schedule` trigger, so GitHub's inactivity disabling cannot reach it.
 
-Each rollout writes a job summary table of repo → result → version. That plus the release page is
-the record of which repos are on which settings version.
+Each rollout writes a job summary table of repo → result → version, and stamps the tag onto every repo
+that came through clean as the `settings_version` custom property — a repo with drift left on it is
+deliberately not stamped, which is what keeps it in the drift query's output. The summary says what one run did; the property
+says what state a repo is in — see [The `settings_version` property](#the-settings_version-property)
+for the query that reads it.
 
 ## Authentication
 
@@ -44,12 +47,25 @@ grant belongs on the other's installation:
 
 | App | Used by | Installed on | Permissions | Secrets |
 |---|---|---|---|---|
-| `swimblocks-reconciler` | `rollout.yml` | **All repositories** in the org | Metadata read; Administration read & write | `APP_ID`, `APP_PRIVATE_KEY` |
+| `swimblocks-reconciler` | `rollout.yml` | **All repositories** in the org | Metadata read; Administration read & write; Issues read & write; Custom properties read & write | `APP_ID`, `APP_PRIVATE_KEY` |
 | `swimblocks-releaser` | `release.yml` | **`swimblocks/.github` only** | Metadata read; Contents read & write | `RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY` |
 
-The reconciler's permissions are what the script's API calls require: Metadata read for
-`gh repo list` and `GET /repos/{repo}`, Administration write for `PATCH /repos/{repo}`, branch
-protection and rulesets. Neither app has a webhook configured.
+The reconciler's permissions are what the script's API calls require, one to one:
+
+| Permission | Grants | Used for |
+|---|---|---|
+| Metadata read | `GET /repos/{repo}` | `gh repo list`, and reading back what was applied |
+| Administration read & write | `PATCH /repos/{repo}`, branch protection, rulesets | merge methods, protection, rulesets |
+| Issues read & write | `POST /repos/{repo}/labels` | creating any label `settings.yml` lists and the repo lacks |
+| Custom properties read & write | `PATCH /repos/{repo}/properties/values` | recording `settings_version` |
+
+That last one is the whole of what the repository-level Custom properties permission grants — one
+endpoint, no read of anything else. The org-level equivalent, `PATCH /orgs/{org}/properties/values`,
+would set every repo in one call but rides on the *organization* Custom properties permission,
+which also carries create, update and delete of every property definition in the org. Per-repo
+calls are the cheaper price.
+
+Neither app has a webhook configured.
 
 **Why the release is not cut with `GITHUB_TOKEN`.** An event raised by `GITHUB_TOKEN` starts no
 further workflow run, so a release published with it would never reach `rollout.yml`. An App
@@ -82,6 +98,8 @@ Perform once (or when recreating the app from scratch). Requires org-owner acces
    - **Webhooks:** uncheck *Active*
    - **Repository permissions → Metadata:** Read (auto-selected)
    - **Repository permissions → Administration:** Read & write
+   - **Repository permissions → Issues:** Read & write
+   - **Repository permissions → Custom properties:** Read & write
    - All other permissions: No access
 3. **Create GitHub App.** Note the **Client ID** on the next page (the numeric **App ID** beside
    it also works — see Authentication above).
@@ -91,7 +109,10 @@ Perform once (or when recreating the app from scratch). Requires org-owner acces
    - `APP_ID` = the Client ID from step 3
    - `APP_PRIVATE_KEY` = full contents of the `.pem` from step 4
 7. Delete the local `.pem` file once stored as the secret.
-8. Check it works. `rollout.yml` is the workflow that uses this app, so run it:
+8. Define the `settings_version` property — see
+   [The `settings_version` property](#the-settings_version-property). The rollout fails on every
+   repo until it exists.
+9. Check it works. `rollout.yml` is the workflow that uses this app, so run it:
 
    ```bash
    gh workflow run rollout.yml -R swimblocks/.github
@@ -140,6 +161,53 @@ Same shape, narrower scope. `release.yml` fails at its first step until this exi
    with no rollout behind it means the release was not published with the App token — that is
    the whole reason this app exists.
 
+> **Adding a permission to an app already installed.** Editing an app's permissions does not
+> change what its tokens can do. GitHub raises an installation request that an org owner has to
+> accept (org Settings → GitHub Apps → *Configure* on the app → **Review request**), and until
+> then the app keeps its old permissions. That is the usual reason a freshly granted permission
+> still 403s.
+
+## The `settings_version` property
+
+Every rollout records the release it applied on each repo as a repository custom property, so
+"which repos are behind" is one query rather than a trawl through run logs. This is what
+`officials-admin` needed and nobody had: it sat unreconciled from creation until someone noticed
+by hand ([#34](https://github.com/swimblocks/.github/issues/34)).
+
+**Define it once**, as an org owner. It is deliberately not something the reconciler can do — the
+app holds values write, not schema admin:
+
+```bash
+gh api -X PUT orgs/swimblocks/properties/schema/settings_version \
+  -f value_type=string \
+  -f description='The settings-YYYY-MM-DD release this repo was last reconciled against.' \
+  -F required=false
+```
+
+`required=false` and **no default value**: a default is reported for every repo whether or not it
+was ever reconciled, which would turn the query below into a false all-clear.
+
+**Which repos are behind:**
+
+```bash
+export WANT=$(gh release view -R swimblocks/.github --json tagName --jq .tagName)
+gh api orgs/swimblocks/properties/values --paginate \
+  --jq '.[] | select(([.properties[]
+        | select(.property_name == "settings_version") | .value] | first) != env.WANT)
+        | .repository_full_name'
+```
+
+Empty output means every repo is on the current release. Anything listed is either behind or has
+never been reconciled — the query does not distinguish, and does not need to: both call for a
+rollout. (`gh`'s `--jq` is gojq, hence `env.WANT` rather than `jq --arg`; no separate `jq` binary
+is needed.)
+
+**What one repo says:**
+
+```bash
+gh api repos/swimblocks/officials-admin/properties/values
+```
+
 ## Rotate a private key
 
 If the key is compromised or expiring:
@@ -163,3 +231,6 @@ If the key is compromised or expiring:
 | `release.yml` says the tag is already published | Expected on a same-day re-run. Roll the existing release out with `rollout.yml`'s `workflow_dispatch` instead. |
 | `release.yml` state is `disabled_inactivity` | Re-enable with `gh workflow enable release.yml -R swimblocks/.github`. Activity alone never re-enables a workflow. |
 | Ruleset apply fails on a public repo | App lacks Administration write, or the ruleset payload in `settings.yml` is malformed. |
+| `FAIL settings_version` with `(HTTP 422)` on every repo | The property isn't defined on the org yet — see [The `settings_version` property](#the-settings_version-property). |
+| `FAIL settings_version` with `(HTTP 403)` | `swimblocks-reconciler` lacks Custom properties write, or the permission was added but the installation request hasn't been accepted. |
+| The drift query lists a repo the rollout reported OK | The rollout ran before the property existed, or from a tag predating it. Re-run `rollout.yml`. |
