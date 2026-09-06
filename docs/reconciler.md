@@ -67,6 +67,10 @@ GitHub recommends the Client ID for minting installation tokens and shows it bes
 the app's settings page; `create-github-app-token` accepts either in its `app-id` input, so the
 secret names are unchanged and an existing numeric value keeps working.
 
+> The last step of each runbook below dispatches a workflow. GitHub only offers
+> `workflow_dispatch` for workflows already on `main`, so neither verification can run from a
+> branch — merge first, then dispatch.
+
 ## Setup / recreate `swimblocks-reconciler`
 
 Perform once (or when recreating the app from scratch). Requires org-owner access.
@@ -87,8 +91,8 @@ Perform once (or when recreating the app from scratch). Requires org-owner acces
    - `APP_ID` = the Client ID from step 3
    - `APP_PRIVATE_KEY` = full contents of the `.pem` from step 4
 7. Delete the local `.pem` file once stored as the secret.
-8. Trigger `rollout.yml` via `workflow_dispatch` and confirm the `create-github-app-token` and
-   `Apply settings` steps both pass.
+8. Trigger `rollout.yml` via `workflow_dispatch` — that is the workflow this app authenticates —
+   and confirm the `create-github-app-token` and `Apply settings` steps both pass.
 
 ## Setup / recreate `swimblocks-releaser`
 
@@ -111,8 +115,8 @@ Same shape, narrower scope. `release.yml` fails at its first step until this exi
    - `RELEASE_APP_PRIVATE_KEY` = full contents of the `.pem` from step 4
 7. Delete the local `.pem` file once stored as the secret.
 8. Trigger `release.yml` via `workflow_dispatch` and confirm it publishes a `settings-YYYY-MM-DD`
-   release **and** that a `rollout.yml` run starts from it. A release that publishes with no
-   rollout behind it means the token was `GITHUB_TOKEN`, not the App.
+   release **and** that a `rollout.yml` run starts behind it. A release with no rollout behind it
+   means the App token was not the one that published it.
 
 ## Rotate a private key
 

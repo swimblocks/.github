@@ -4,12 +4,12 @@ name: release
 # and `scripts/apply-settings.py` at the version the org is on. Publishing the
 # release is what starts `rollout.yml`.
 #
-# The release also keeps this repo's scheduled workflows alive. GitHub disables a
-# scheduled workflow in a public repo after 60 days without repository *activity*,
-# and workflow runs are not activity — the reconciler this replaces ran every
-# Monday through its quiet window and was disabled anyway, because its whole
-# effect was on other repositories. A published release is an event in this repo,
-# so a weekly cadence keeps the clock reset regardless of how quiet the org is.
+# The weekly cadence is also a keepalive, and the release publishes whether or
+# not `settings.yml` changed for that reason. GitHub disables a scheduled
+# workflow in a public repo after 60 days without repository *activity*; a
+# workflow run is not activity, a published release is. Dropping the schedule or
+# making the release conditional would put this workflow back in line to be
+# switched off.
 #
 # See https://github.com/swimblocks/.github/issues/34 and
 # docs/design/0003-settings-releases-and-rollout.md.
@@ -25,11 +25,10 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      # The `swimblocks-releaser` App, not GITHUB_TOKEN: an event raised by
-      # GITHUB_TOKEN starts no further workflow run, so a release cut with it
-      # would never reach `rollout.yml`. A separate App keeps Contents write off
-      # `swimblocks-reconciler`, which is installed on every repo in the org —
-      # this one is installed on `.github` alone. See docs/reconciler.md.
+      # `swimblocks-releaser` — Contents write on `.github` alone, separate from
+      # the org-wide `swimblocks-reconciler`. The release must be published with
+      # an App token for it to raise the event `rollout.yml` runs on.
+      # Setup and permissions: docs/reconciler.md.
       - uses: actions/create-github-app-token@v1
         id: app-token
         with:
