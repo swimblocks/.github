@@ -62,6 +62,11 @@ where `main` is already gated by CODEOWNERS review.
 
 All four secrets live on `swimblocks/.github` under Settings → Secrets and variables → Actions.
 
+**`APP_ID` / `RELEASE_APP_ID` hold the app's Client ID** (`Iv23li…`), not the numeric App ID.
+GitHub recommends the Client ID for minting installation tokens and shows it beside the App ID on
+the app's settings page; `create-github-app-token` accepts either in its `app-id` input, so the
+secret names are unchanged and an existing numeric value keeps working.
+
 ## Setup / recreate `swimblocks-reconciler`
 
 Perform once (or when recreating the app from scratch). Requires org-owner access.
@@ -74,11 +79,12 @@ Perform once (or when recreating the app from scratch). Requires org-owner acces
    - **Repository permissions → Metadata:** Read (auto-selected)
    - **Repository permissions → Administration:** Read & write
    - All other permissions: No access
-3. **Create GitHub App.** Note the **App ID** on the next page.
+3. **Create GitHub App.** Note the **Client ID** on the next page (the numeric **App ID** beside
+   it also works — see Authentication above).
 4. **Private keys → Generate a private key.** A `.pem` file downloads.
 5. **Install App → `swimblocks` → All repositories.**
 6. On `swimblocks/.github`: **Settings → Secrets and variables → Actions → New repository secret**:
-   - `APP_ID` = the numeric App ID from step 3
+   - `APP_ID` = the Client ID from step 3
    - `APP_PRIVATE_KEY` = full contents of the `.pem` from step 4
 7. Delete the local `.pem` file once stored as the secret.
 8. Trigger `rollout.yml` via `workflow_dispatch` and confirm the `create-github-app-token` and
@@ -96,12 +102,12 @@ Same shape, narrower scope. `release.yml` fails at its first step until this exi
    - **Repository permissions → Metadata:** Read (auto-selected)
    - **Repository permissions → Contents:** Read & write
    - All other permissions: No access
-3. **Create GitHub App.** Note the **App ID**.
+3. **Create GitHub App.** Note the **Client ID** (`Iv23li…`) on the next page.
 4. **Private keys → Generate a private key.** A `.pem` file downloads.
 5. **Install App → `swimblocks` → Only select repositories → `.github`.** Not all repositories —
    the narrow install is the whole point of a second app.
 6. On `swimblocks/.github`, add the repository secrets:
-   - `RELEASE_APP_ID` = the numeric App ID from step 3
+   - `RELEASE_APP_ID` = the Client ID from step 3
    - `RELEASE_APP_PRIVATE_KEY` = full contents of the `.pem` from step 4
 7. Delete the local `.pem` file once stored as the secret.
 8. Trigger `release.yml` via `workflow_dispatch` and confirm it publishes a `settings-YYYY-MM-DD`
