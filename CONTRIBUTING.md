@@ -236,13 +236,15 @@ This only works on public repos (rulesets); private repos have no protection at 
 ### How it's enforced
 
 - **`.github/workflows/release.yml`** — publishes a `settings-YYYY-MM-DD` release every Monday,
-  pinning the version of `settings.yml` the org is on, then dispatches the rollout.
+  pinning the version of `settings.yml` the org is on. Publishing it starts the rollout.
 - **`.github/workflows/rollout.yml`** — checks out a released tag and PATCHes any drift on every
-  repo in the org. It runs from the weekly release, from a release cut by hand, on
-  `workflow_dispatch`, and on a `repo-created` `repository_dispatch` event. It authenticates as a
-  GitHub App (secrets `APP_ID` + `APP_PRIVATE_KEY`); see
-  [`docs/reconciler.md`](docs/reconciler.md) for how the two work, the app's permissions, and the
-  setup / key-rotation runbook.
+  repo in the org. It runs on every release, on `workflow_dispatch`, and on a `repo-created`
+  `repository_dispatch` event.
+
+  Each authenticates as its own GitHub App — `swimblocks-releaser` on `.github` alone for the
+  release, `swimblocks-reconciler` across the org for the rollout — so neither holds a permission
+  the other's scope would make dangerous. See [`docs/reconciler.md`](docs/reconciler.md) for the
+  permissions, the secrets, and the setup / key-rotation runbook.
 - **[`CODEOWNERS`](CODEOWNERS)** + branch protection on `main` (now also in `settings.yml`) —
   `settings.yml` and the workflows that apply it can only change via a PR that the designated
   admin reviews.

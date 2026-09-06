@@ -13,10 +13,11 @@ name: rollout
 # docs/design/0003-settings-releases-and-rollout.md.
 
 on:
-  # A release cut by hand. The weekly one from release.yml arrives via
-  # workflow_dispatch instead — see the comment on that workflow's dispatch step.
+  # The main path: every release, weekly from release.yml or cut by hand.
   release:
     types: [published]
+  # Re-run a rollout without cutting a release — e.g. after fixing a repo that
+  # failed, or on the same day release.yml already published.
   workflow_dispatch:
     inputs:
       tag:

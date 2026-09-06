@@ -10,10 +10,10 @@ decision history lives in [`docs/design/`](design/), most recently
 ## What they do
 
 **`release.yml`** publishes a release tagged `settings-YYYY-MM-DD` every Monday at 06:00 UTC,
-whether or not `settings.yml` changed, then dispatches the rollout. The tag pins the version the
-org is on. The weekly cadence is also what keeps this repo's scheduled workflows alive — GitHub
-disables them after 60 days without repository activity, and a published release is activity
-where a workflow run is not. See
+whether or not `settings.yml` changed. The tag pins the version the org is on, and publishing it
+is what starts the rollout. The weekly cadence is also what keeps this repo's scheduled workflows
+alive — GitHub disables them after 60 days without repository activity, and a published release
+is activity where a workflow run is not. See
 [`0003`](design/0003-settings-releases-and-rollout.md) for why that distinction sank the previous
 design.
 
@@ -23,10 +23,9 @@ script reads `settings.yml` and PATCHes any drift in merge methods, labels, bran
 and rulesets. Because it re-asserts every setting, it is also the drift check: anything changed
 through the GitHub UI is put back. It triggers:
 
-- **From the weekly release** — `release.yml` dispatches it with the tag it just published.
-- **On a release cut by hand** — `release: published`.
+- **On any release** — `release: published`, whether cut weekly by `release.yml` or by hand.
 - **On demand** — `workflow_dispatch` from the Actions tab, with an optional `tag` input
-  (defaults to the latest release).
+  (defaults to the latest release). This is how you re-run a rollout without cutting a release.
 - **On repo creation** — a `repo-created` `repository_dispatch` event.
 
 It carries no `schedule` trigger, so GitHub's inactivity disabling cannot reach it.
@@ -36,31 +35,34 @@ the record of which repos are on which settings version.
 
 ## Authentication
 
-`rollout.yml` authenticates as a **GitHub App** (`swimblocks-reconciler`), not a personal token.
-At the start of each run, `actions/create-github-app-token@v1` mints a short-lived (~1 hour)
-installation token scoped to the org. Nothing to rotate on a schedule.
+Both workflows authenticate as **GitHub Apps**, not personal tokens. At the start of each run,
+`actions/create-github-app-token@v1` mints a short-lived (~1 hour) installation token. Nothing to
+rotate on a schedule.
 
-Two repository secrets on `swimblocks/.github` drive it:
+There are two apps, because they need different permissions on different scopes — and neither
+grant belongs on the other's installation:
 
-| Secret | Value |
-|---|---|
-| `APP_ID` | Numeric app ID from the app's settings page |
-| `APP_PRIVATE_KEY` | Full contents of the app's `.pem` private key |
+| App | Used by | Installed on | Permissions | Secrets |
+|---|---|---|---|---|
+| `swimblocks-reconciler` | `rollout.yml` | **All repositories** in the org | Metadata read; Administration read & write | `APP_ID`, `APP_PRIVATE_KEY` |
+| `swimblocks-releaser` | `release.yml` | **`swimblocks/.github` only** | Metadata read; Contents read & write | `RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY` |
 
-The app needs the minimum permissions the script's API calls require:
+The reconciler's permissions are what the script's API calls require: Metadata read for
+`gh repo list` and `GET /repos/{repo}`, Administration write for `PATCH /repos/{repo}`, branch
+protection and rulesets. Neither app has a webhook configured.
 
-| Permission | Level | Used by |
-|---|---|---|
-| Repository → Metadata | Read | `gh repo list`, `GET /repos/{repo}` |
-| Repository → Administration | Read & write | `PATCH /repos/{repo}`, branch protection, rulesets |
+**Why the release is not cut with `GITHUB_TOKEN`.** An event raised by `GITHUB_TOKEN` starts no
+further workflow run, so a release published with it would never reach `rollout.yml`. An App
+installation token raises real events, so `release: published` fires normally.
 
-It is installed on **all repositories** in the org, with no webhook configured.
+**Why a second app rather than Contents write on the reconciler.** The reconciler is installed on
+every repo in the org, so adding Contents write there would hand org-wide push access to a
+credential that only needs to change settings. The releaser is installed on `.github` alone,
+where `main` is already gated by CODEOWNERS review.
 
-The release itself is cut with the workflow's own `GITHUB_TOKEN`, not the App — see
-[`0003`](design/0003-settings-releases-and-rollout.md) for why the App is deliberately not
-given Contents write.
+All four secrets live on `swimblocks/.github` under Settings → Secrets and variables → Actions.
 
-## Setup / recreate the GitHub App
+## Setup / recreate `swimblocks-reconciler`
 
 Perform once (or when recreating the app from scratch). Requires org-owner access.
 
@@ -82,22 +84,50 @@ Perform once (or when recreating the app from scratch). Requires org-owner acces
 8. Trigger `rollout.yml` via `workflow_dispatch` and confirm the `create-github-app-token` and
    `Apply settings` steps both pass.
 
-## Rotate the private key
+## Setup / recreate `swimblocks-releaser`
+
+Same shape, narrower scope. `release.yml` fails at its first step until this exists.
+
+1. **github.com → `swimblocks` org Settings → Developer settings → GitHub Apps → New GitHub App.**
+2. Fill in:
+   - **Name:** `swimblocks-releaser`
+   - **Homepage URL:** `https://github.com/swimblocks`
+   - **Webhooks:** uncheck *Active*
+   - **Repository permissions → Metadata:** Read (auto-selected)
+   - **Repository permissions → Contents:** Read & write
+   - All other permissions: No access
+3. **Create GitHub App.** Note the **App ID**.
+4. **Private keys → Generate a private key.** A `.pem` file downloads.
+5. **Install App → `swimblocks` → Only select repositories → `.github`.** Not all repositories —
+   the narrow install is the whole point of a second app.
+6. On `swimblocks/.github`, add the repository secrets:
+   - `RELEASE_APP_ID` = the numeric App ID from step 3
+   - `RELEASE_APP_PRIVATE_KEY` = full contents of the `.pem` from step 4
+7. Delete the local `.pem` file once stored as the secret.
+8. Trigger `release.yml` via `workflow_dispatch` and confirm it publishes a `settings-YYYY-MM-DD`
+   release **and** that a `rollout.yml` run starts from it. A release that publishes with no
+   rollout behind it means the token was `GITHUB_TOKEN`, not the App.
+
+## Rotate a private key
 
 If the key is compromised or expiring:
 
 1. App settings → **Private keys → Generate a private key** (you can have two active at once).
-2. Replace the `APP_PRIVATE_KEY` secret on `swimblocks/.github` with the new `.pem` contents.
-3. Run `rollout.yml` to confirm it still authenticates.
+2. Replace the matching secret on `swimblocks/.github` with the new `.pem` contents —
+   `APP_PRIVATE_KEY` for the reconciler, `RELEASE_APP_PRIVATE_KEY` for the releaser.
+3. Run the workflow that uses it (`rollout.yml` or `release.yml`) to confirm it still
+   authenticates.
 4. Delete the old key from the app's settings page.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
-| `create-github-app-token` step fails | `APP_ID` / `APP_PRIVATE_KEY` secret missing or malformed, or the app isn't installed on the org. |
+| `rollout.yml` fails at `create-github-app-token` | `APP_ID` / `APP_PRIVATE_KEY` secret missing or malformed, or `swimblocks-reconciler` isn't installed on the org. |
 | `No repos found` | App lacks Metadata read, or isn't installed on the repos. |
 | `SKIP branches.<branch>` on a private repo | Expected: GitHub Free disallows branch protection on private repos. Promote the repo to public to enable it. |
-| A release published but no rollout ran | The dispatch step in `release.yml` failed, or `rollout.yml` is missing from the default branch. Re-run it from the Actions tab with the release tag as the `tag` input. |
+| A release published but no rollout ran | The release was cut with `GITHUB_TOKEN` rather than the `swimblocks-releaser` App, so it raised no event; or `rollout.yml` is missing from the default branch. Re-run `rollout.yml` from the Actions tab with the release tag as the `tag` input. |
+| `release.yml` fails at `create-github-app-token` | `RELEASE_APP_ID` / `RELEASE_APP_PRIVATE_KEY` missing or malformed, or `swimblocks-releaser` isn't installed on `.github`. |
+| `release.yml` says the tag is already published | Expected on a same-day re-run. Roll the existing release out with `rollout.yml`'s `workflow_dispatch` instead. |
 | `release.yml` state is `disabled_inactivity` | Re-enable with `gh workflow enable release.yml -R swimblocks/.github`. Activity alone never re-enables a workflow. |
 | Ruleset apply fails on a public repo | App lacks Administration write, or the ruleset payload in `settings.yml` is malformed. |

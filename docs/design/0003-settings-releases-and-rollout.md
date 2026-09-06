@@ -72,19 +72,22 @@ cron used to serve. The `repo-created` hook moves here unchanged, so a repo crea
 
 ### The handoff between them
 
-An event raised by `GITHUB_TOKEN` does not start another workflow run. The weekly release is cut
-by `GITHUB_TOKEN`, so its `release: published` event reaches nothing, and `rollout.yml` would sit
-idle while releases piled up.
+An event raised by `GITHUB_TOKEN` does not start another workflow run. A release cut with the
+workflow's own token would therefore reach nothing, and `rollout.yml` would sit idle while
+releases piled up. An App installation token raises real events, so the release is cut with one
+and `release: published` is the only trigger the automated path needs.
 
-`release.yml` therefore dispatches the rollout explicitly (`gh workflow run rollout.yml
---field tag=…`). `rollout.yml` keeps its `release: published` trigger for a release cut by hand,
-which does raise a live event. The two paths are complementary, not redundant: exactly one fires
-per release.
+That token comes from a **second App, `swimblocks-releaser`**: Metadata read plus Contents write,
+installed on `swimblocks/.github` alone. The obvious shortcut — reusing `swimblocks-reconciler` —
+was rejected. That App is installed on *all repositories* in the org, so adding Contents write to
+it would hand org-wide push access to a credential that only needs to change settings. Two apps
+cost a second private key to store and rotate; that is the price of keeping each grant as narrow
+as the job it does.
 
-The alternative was to cut the release with the `swimblocks-reconciler` App token, whose events
-do trigger workflows. That was rejected: the App is installed on all repositories and holds
-Metadata read plus Administration write, and creating a release would add Contents write across
-the whole org to a credential that only needs to change settings.
+The alternative considered and dropped was for `release.yml` to dispatch the rollout explicitly
+(`gh workflow run rollout.yml --raw-field tag=…`) under `GITHUB_TOKEN`. It works with no setup at
+all, but leaves `rollout.yml` carrying two trigger paths where only one ever fires automatically,
+and it needs `actions: write` on the workflow token.
 
 ### Version traceability
 
@@ -100,13 +103,20 @@ definitions and is left open below.
 
 ## Verification
 
-- `release.yml` run publishes `settings-YYYY-MM-DD` and the rollout run appears within a minute.
+- `release.yml` run publishes `settings-YYYY-MM-DD` and a `rollout.yml` run appears behind it.
+  A release with no rollout behind it means the release was cut with `GITHUB_TOKEN`, not the App.
 - The rollout's job summary lists every repo in the org against the released tag.
 - `gh api repos/swimblocks/.github/actions/workflows/<release id> -q .state` stays `active`
   across a quiet stretch longer than 60 days.
 - A `repo-created` `repository_dispatch` starts a rollout.
 - `ruff check .` and `pytest -q` pass; `summary_table` and `parse_args` are covered in
   `tests/test_apply_settings.py`.
+
+### Prerequisite
+
+`release.yml` fails at its first step until `swimblocks-releaser` exists and
+`RELEASE_APP_ID` / `RELEASE_APP_PRIVATE_KEY` are set on `swimblocks/.github`. The runbook is in
+[`docs/reconciler.md`](../reconciler.md).
 
 ## Open items
 
