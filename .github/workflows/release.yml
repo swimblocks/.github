@@ -1,0 +1,53 @@
+name: release
+
+# Publishes the weekly settings release: a dated tag pinning `.github/settings.yml`
+# and `scripts/apply-settings.py` at the version the org is on. Publishing the
+# release is what starts `rollout.yml`.
+#
+# The weekly cadence is also a keepalive, and the release publishes whether or
+# not `settings.yml` changed for that reason. GitHub disables a scheduled
+# workflow in a public repo after 60 days without repository *activity*; a
+# workflow run is not activity, a published release is. Dropping the schedule or
+# making the release conditional would put this workflow back in line to be
+# switched off.
+#
+# See https://github.com/swimblocks/.github/issues/34 and
+# docs/design/0003-settings-releases-and-rollout.md.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # `swimblocks-releaser` — Contents write on `.github` alone, separate from
+      # the org-wide `swimblocks-reconciler`. The release must be published with
+      # an App token for it to raise the event `rollout.yml` runs on.
+      # Setup and permissions: docs/reconciler.md.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: swimblocks
+          repositories: .github
+
+      - name: Publish the settings release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          tag="settings-$(date -u +'%Y-%m-%d')"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice::$tag is already published; nothing to do."
+            exit 0
+          fi
+          gh release create "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Settings $(date -u +'%B %-d, %Y')" \
+            --generate-notes

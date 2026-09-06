@@ -12,8 +12,10 @@ Organization-wide defaults for [SwimBlocks](https://github.com/swimblocks).
 - [`.github/settings.yml`](.github/settings.yml) — declarative org-wide repo settings
 - [`.github/workflows/reusable-python-ci.yml`](.github/workflows/reusable-python-ci.yml) — shared
   Python CI (ruff + pytest), called by each repo's `ci.yml`
-- [`.github/workflows/reconcile-repo-defaults.yml`](.github/workflows/reconcile-repo-defaults.yml)
-  — applies `settings.yml` across the org on schedule / dispatch / new-repo events
+- [`.github/workflows/release.yml`](.github/workflows/release.yml) — publishes a weekly
+  `settings-YYYY-MM-DD` release pinning the version of `settings.yml` the org is on
+- [`.github/workflows/rollout.yml`](.github/workflows/rollout.yml) — applies a released
+  `settings.yml` across the org, on release / dispatch / new-repo events
 - [`scripts/create-repo.sh`](scripts/create-repo.sh) — **the** way to create a new SwimBlocks
   repo (defaults to private; aligns settings immediately)
 - [`scripts/make-public.sh`](scripts/make-public.sh) — **the** way to promote a private repo
@@ -21,7 +23,7 @@ Organization-wide defaults for [SwimBlocks](https://github.com/swimblocks).
   then flips visibility and applies branch protection). This is the documented home for any
   pre-public step we learn we need.
 - [`scripts/apply-settings.py`](scripts/apply-settings.py) — applies `settings.yml` to a given
-  repo; used by the reconciler workflow, `create-repo.sh`, and `make-public.sh`
+  repo; used by the rollout workflow, `create-repo.sh`, and `make-public.sh`
 - [`scripts/install-local-agent-files.sh`](scripts/install-local-agent-files.sh) — writes the
   user-local agent pointer files (`~/src/AGENTS.md` etc.) so agents invoked outside any
   specific repo still pick up the canonical rules. See

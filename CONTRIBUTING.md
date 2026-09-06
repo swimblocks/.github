@@ -217,7 +217,7 @@ bypass actors, so org owners and repo admins can force-push when genuinely neede
 - No force pushes or deletions for non-admins.
 
 **Private repos** fall back to the legacy `branches:` protection block. GitHub Free does not
-allow branch protection on private repositories, so the reconciler skips it and reports it as a
+allow branch protection on private repositories, so the rollout skips it and reports it as a
 known limitation; the repo remains aligned on all the merge-method fields. Either upgrade the
 plan or flip the repo public to enable protection.
 
@@ -235,13 +235,18 @@ This only works on public repos (rulesets); private repos have no protection at 
 
 ### How it's enforced
 
-- **`.github/workflows/reconcile-repo-defaults.yml`** — a scheduled Actions workflow that runs
-  weekly, on `workflow_dispatch`, and on a `repo-created` `repository_dispatch` event. It reads
-  `settings.yml` and PATCHes any drift on every repo in the org. It authenticates as a GitHub App
-  (secrets `APP_ID` + `APP_PRIVATE_KEY`); see [`docs/reconciler.md`](docs/reconciler.md) for how it
-  works, the app's permissions, and the setup / key-rotation runbook.
+- **`.github/workflows/release.yml`** — publishes a `settings-YYYY-MM-DD` release every Monday,
+  pinning the version of `settings.yml` the org is on. Publishing it starts the rollout.
+- **`.github/workflows/rollout.yml`** — checks out a released tag and PATCHes any drift on every
+  repo in the org. It runs on every release, on `workflow_dispatch`, and on a `repo-created`
+  `repository_dispatch` event.
+
+  Each authenticates as its own GitHub App — `swimblocks-releaser` on `.github` alone for the
+  release, `swimblocks-reconciler` across the org for the rollout — so neither holds a permission
+  the other's scope would make dangerous. See [`docs/reconciler.md`](docs/reconciler.md) for the
+  permissions, the secrets, and the setup / key-rotation runbook.
 - **[`CODEOWNERS`](CODEOWNERS)** + branch protection on `main` (now also in `settings.yml`) —
-  `settings.yml` and the reconciler workflow can only change via a PR that the designated
+  `settings.yml` and the workflows that apply it can only change via a PR that the designated
   admin reviews.
 
 ### Creating a new repo
@@ -254,7 +259,7 @@ scripts/create-repo.sh <repo-name> --description "Short About line"
 
 The script **defaults to `--private`** because SwimBlocks repos usually start that way and
 graduate to public later. While the repo is private, branch protection won't be applied
-(GitHub Free disallows it on private repos); the reconciler will report this as a SKIP, which
+(GitHub Free disallows it on private repos); the rollout will report this as a SKIP, which
 is the expected steady state until you promote the repo.
 
 After creation, add the new repo to the [org profile README](profile/README.md) and file
@@ -288,8 +293,9 @@ into `make-public.sh`** rather than being remembered. Treat the script as a livi
 
 ### Re-aligning an existing repo
 
-If a repo's settings have drifted (or someone clicked through the GitHub UI), wait for the
-next scheduled reconciler run, or trigger it manually from the Actions tab on `swimblocks/.github`.
+If a repo's settings have drifted (or someone clicked through the GitHub UI), wait for the next
+weekly rollout, or run `rollout.yml` manually from the Actions tab on `swimblocks/.github`. For a
+single repo, `python scripts/apply-settings.py swimblocks/<repo>` does the same thing locally.
 
 ## Project scope
 

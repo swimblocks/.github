@@ -2,20 +2,25 @@
 """Apply SwimBlocks org-wide repo settings to one or more repos.
 
 Reads `.github/settings.yml` (Probot "Settings" app shape) and PATCHes the
-repository settings via the GitHub REST API using `gh`. Used by both the
-scheduled reconciler workflow and by `scripts/create-repo.sh` at new-repo
+repository settings via the GitHub REST API using `gh`. Used by the `rollout`
+workflow across the whole org, and by `scripts/create-repo.sh` at new-repo
 creation time.
 
 Usage:
     python scripts/apply-settings.py owner/repo [owner/repo ...]
 
-Requires the `gh` CLI authenticated with a token that has admin rights on
-the target repo(s). Inside the reconciler workflow that's
-`SWIMBLOCKS_ADMIN_TOKEN`; locally it's your usual `gh auth login`.
+Inside the rollout workflow, which records the version in the job summary:
+
+    python scripts/apply-settings.py --version TAG --summary-file FILE owner/repo
+
+Requires the `gh` CLI authenticated with a token that has admin rights on the
+target repo(s). Inside the rollout workflow that is a GitHub App installation
+token; locally it is your usual `gh auth login`.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 import subprocess
@@ -318,13 +323,48 @@ def verify_branch_protection(repo: str, branch: str, protection: dict) -> bool:
     return ok
 
 
+# ---------------------------------------------------------------------------
+# Run summary
+#
+# Nothing on a repo records which settings version it is on, so a rollout leaves
+# no trace anyone can query afterwards — `officials-admin` sat unreconciled until
+# somebody noticed by hand. The table below makes the run itself the record: the
+# release it names plus the run history say which repos got which version.
+# ---------------------------------------------------------------------------
+
+def summary_table(version: str, repos: list[str], failures: list[str]) -> str:
+    """A markdown table of repo -> result -> version, for the job summary."""
+    failed = set(failures)
+    heading = f"## Settings rollout — `{version}`" if version else "## Settings rollout"
+    lines = [heading, "", "| Repo | Result | Version |", "|---|---|---|"]
+    for repo in repos:
+        result = "FAIL — drift remains" if repo in failed else "OK — applied"
+        lines.append(f"| `{repo}` | {result} | `{version or 'unversioned'}` |")
+    return "\n".join(lines) + "\n"
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="apply-settings.py",
+        description="Apply .github/settings.yml to one or more repos.",
+    )
+    parser.add_argument("repos", nargs="+", metavar="owner/repo")
+    parser.add_argument(
+        "--version", default="",
+        help="Settings release tag being rolled out, recorded in the summary.",
+    )
+    parser.add_argument(
+        "--summary-file",
+        help="Append the run summary table to this file (e.g. $GITHUB_STEP_SUMMARY).",
+    )
+    return parser.parse_args(argv)
+
+
 def main(argv: list[str]) -> int:
     if not shutil.which("gh"):
         print("error: gh CLI not on PATH", file=sys.stderr)
         return 2
-    if len(argv) < 2:
-        print(__doc__, file=sys.stderr)
-        return 2
+    opts = parse_args(argv[1:])
 
     settings_path = Path(__file__).resolve().parents[1] / ".github" / "settings.yml"
     settings = load_settings(settings_path)
@@ -336,7 +376,7 @@ def main(argv: list[str]) -> int:
     labels_block = settings.get("labels") or []
 
     failures: list[str] = []
-    for repo in argv[1:]:
+    for repo in opts.repos:
         print(f"=== {repo} ===")
         apply(repo, args)
         if not verify(repo, repo_block):
@@ -397,6 +437,11 @@ def main(argv: list[str]) -> int:
                 if not verify_branch_protection(repo, branch, protection):
                     if repo not in failures:
                         failures.append(repo)
+
+    if opts.summary_file:
+        with open(opts.summary_file, "a", encoding="utf-8") as f:
+            f.write(summary_table(opts.version, opts.repos, failures))
+
     if failures:
         print(f"\nFAIL: drift remains on {', '.join(failures)}", file=sys.stderr)
         return 1
