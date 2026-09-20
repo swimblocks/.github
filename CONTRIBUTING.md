@@ -112,8 +112,8 @@ signing. Create new commits rather than amending already-pushed ones.
 ## Quality gates
 
 - **Lint:** Python repos use [ruff](https://docs.astral.sh/ruff/) with `select = ["E","F","I","W"]`.
-  Run `ruff check .` (and `ruff check --fix .` to auto-fix) before pushing.
-- **Tests:** `pytest -q`. Add coverage for new behaviour and regressions.
+  Run `uv run ruff check .` (and `uv run ruff check --fix .` to auto-fix) before pushing.
+- **Tests:** `uv run pytest -q`. Add coverage for new behaviour and regressions.
 - **CI:** Python repos call the shared reusable workflow — see
   [`.github/workflows/reusable-python-ci.yml`](.github/workflows/reusable-python-ci.yml).
   A repo's own `ci.yml` should be a thin caller:
@@ -126,28 +126,45 @@ signing. Create new commits rather than amending already-pushed ones.
 
 ## Dependencies
 
-- `requirements.txt` holds **direct** runtime + test dependencies only, UTF-8, with `>=`
-  minimums. Let pip resolve transitive deps; don't pin the whole `pip freeze` output.
-- Dev-only tools (e.g. `ruff`) go in `requirements-dev.txt`, which layers on `requirements.txt`.
+- Python repos use [`uv`](https://docs.astral.sh/uv/). **Direct** runtime dependencies go in
+  `pyproject.toml` under `[project] dependencies`, with `>=` minimums; dev-only tools (e.g.
+  `ruff`, `pytest`) go in `[dependency-groups] dev`. Don't hand-write transitive pins.
+- **Commit `uv.lock`.** It is where the transitive pins live, so a clone and CI test the same
+  versions. Never edit it by hand; change dependencies with `uv add` / `uv remove` (or edit
+  `pyproject.toml` and run `uv lock`). CI runs `uv sync --locked`, which fails a PR whose
+  `pyproject.toml` and `uv.lock` disagree.
+- A repo that is scripts rather than an installable package omits `[build-system]`.
+- **Legacy repos** still on `requirements.txt` / `requirements-dev.txt` keep working: the shared
+  CI runs the pip flow whenever there is no `uv.lock`. New repos start on `uv`; existing ones
+  migrate under their own issue. See
+  [`docs/design/0004-uv-standard.md`](docs/design/0004-uv-standard.md).
 - Dependabot config lives **per repo** at `.github/dependabot.yml` (GitHub has no org-wide
-  Dependabot inheritance). Weekly pip + github-actions updates is the default.
+  Dependabot inheritance). Weekly `uv` (or `pip`, for a legacy repo) + github-actions updates
+  is the default.
 
-## Environments (venv)
+## Environments (uv)
 
-Whether to use a virtualenv depends on whether the environment is **persistent/shared** or
-**ephemeral/single-purpose**:
+A developer laptop or a devcontainer/Codespace hosts many projects and outlives any single task,
+so **project dependencies never go into the global interpreter** — global installs cause
+cross-project conflicts.
 
-- **Persistent or shared → use a venv.** A developer laptop or a devcontainer/Codespace hosts
-  many projects and outlives any single task; global installs cause cross-project conflicts.
-  Create and activate `.venv` (gitignored org-wide), then `pip install -r requirements-dev.txt`.
-  A repo's devcontainer should provision this automatically via `postCreateCommand` so there's no
-  manual step — see [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) here for
-  the pattern.
-- **Ephemeral, single-job → no venv.** A GitHub Actions runner is a throwaway VM dedicated to one
-  job; the machine is already the isolation. CI workflows install globally on purpose.
+`uv` makes that the default rather than something to remember: `uv sync` and `uv run` always
+work inside the project's `.venv` (gitignored org-wide), creating it when it's missing. There is
+no activation step, on any OS. The same commands run locally and in CI:
+
+```bash
+uv sync                 # create/refresh .venv from uv.lock
+uv run ruff check .
+uv run pytest -q
+```
+
+A repo's devcontainer should run `uv sync` via `postCreateCommand`, so a contributor (or agent)
+lands in the documented environment with no manual step.
 
 Rationale and the cross-repo rollout are in
-[`docs/design/0002-venv-standard.md`](docs/design/0002-venv-standard.md).
+[`docs/design/0004-uv-standard.md`](docs/design/0004-uv-standard.md); it supersedes the pip
+mechanism, and the no-venv-on-CI exception, in
+[`0002`](docs/design/0002-venv-standard.md).
 
 ## Secrets & data
 

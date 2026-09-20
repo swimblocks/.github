@@ -133,12 +133,15 @@ for Claude Code's parent-walk advantage; in-repo agents already see the per-repo
 
 Standard SwimBlocks dev box:
 
-- **Python 3.12+** (every working repo uses it).
+- **[`uv`](https://docs.astral.sh/uv/getting-started/installation/)** — manages each repo's
+  `.venv` and dependencies, and installs Python itself when a repo needs a version you lack.
+- **Python 3.12+** (every working repo uses it; `uv` fetches it if it isn't installed).
 - **`gh` CLI**, logged in (`gh auth status` shows green).
 - **`gcloud` CLI**, logged in via `gcloud auth application-default login` (only needed for
   repos that touch Google Sheets / Drive — `rems-sync`, `swim-club-tech-survey`).
 - **`ghq`** (optional but recommended for the layout above).
-- **`ruff`** and **`pytest`** are installed per-repo via each repo's `requirements-dev.txt`.
+- **`ruff`** and **`pytest`** are installed per-repo by `uv sync` (they live in each repo's
+  `pyproject.toml` dev group). Repos not yet migrated to `uv` still use `requirements-dev.txt`.
 
 See each repo's own README for repo-specific setup beyond this.
 

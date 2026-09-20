@@ -9,8 +9,12 @@ name: reusable-python-ci
 # Optionally override inputs:
 #   with:
 #     python-version: "3.12"
-#     requirements-file: requirements-dev.txt
 #     run-lint: true
+#
+# Dependency tooling is detected, not configured. A repo with a committed `uv.lock`
+# is on the org standard (docs/design/0004-uv-standard.md) and gets `uv sync --locked`.
+# A repo without one is still on the legacy pip + requirements-dev.txt flow and keeps
+# working unchanged until it migrates; `requirements-file` only applies to that path.
 
 on:
   workflow_call:
@@ -20,7 +24,7 @@ on:
         type: string
         default: "3.12"
       requirements-file:
-        description: Requirements file to install
+        description: Legacy (pip) repos only — requirements file to install. Ignored when uv.lock is present.
         type: string
         default: requirements-dev.txt
       run-lint:
@@ -37,17 +41,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Detect dependency tooling
+        id: tooling
+        run: |
+          if [ -f uv.lock ]; then
+            echo "tool=uv" >> "$GITHUB_OUTPUT"
+          else
+            echo "tool=pip" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --- uv (org standard) ---
+      # setup-uv publishes exact tags only (no floating major), so this is pinned to a
+      # release; Dependabot's github-actions ecosystem keeps it current.
+      - uses: astral-sh/setup-uv@v10.1.0
+        if: ${{ steps.tooling.outputs.tool == 'uv' }}
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Install dependencies (uv)
+        if: ${{ steps.tooling.outputs.tool == 'uv' }}
+        # --locked fails if uv.lock is out of date with pyproject.toml, so a PR that
+        # edits dependencies without re-locking goes red instead of testing stale pins.
+        run: uv sync --locked
+
+      - name: Lint (ruff)
+        if: ${{ inputs.run-lint && steps.tooling.outputs.tool == 'uv' }}
+        run: uv run --no-sync ruff check .
+
+      - name: Tests (pytest)
+        if: ${{ steps.tooling.outputs.tool == 'uv' }}
+        run: uv run --no-sync pytest -q
+
+      # --- pip (legacy, until the repo migrates) ---
       - uses: actions/setup-python@v5
+        if: ${{ steps.tooling.outputs.tool == 'pip' }}
         with:
           python-version: ${{ inputs.python-version }}
           cache: pip
 
-      - name: Install dependencies
+      - name: Install dependencies (pip)
+        if: ${{ steps.tooling.outputs.tool == 'pip' }}
         run: pip install -r ${{ inputs.requirements-file }}
 
-      - name: Lint (ruff)
-        if: ${{ inputs.run-lint }}
+      - name: Lint (ruff, pip)
+        if: ${{ inputs.run-lint && steps.tooling.outputs.tool == 'pip' }}
         run: ruff check .
 
-      - name: Tests (pytest)
+      - name: Tests (pytest, pip)
+        if: ${{ steps.tooling.outputs.tool == 'pip' }}
         run: pytest -q

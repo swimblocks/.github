@@ -25,17 +25,14 @@ If you've just cloned a SwimBlocks repo for the first time:
 
 ```bash
 # Prereqs (one-time, per machine):
-#   Python 3.12+
+#   uv          (https://docs.astral.sh/uv/ — manages the venv, and Python itself if needed)
 #   gcloud CLI  (only needed for repos that touch Google Sheets / Drive)
 #   gh CLI      (for opening issues / PRs)
 
 cd <repo-root>
-python -m venv .venv
-.venv/Scripts/activate            # PowerShell: .venv\Scripts\Activate.ps1
-                                  # Linux/macOS:  source .venv/bin/activate
-pip install -r requirements-dev.txt
-ruff check .
-pytest -q
+uv sync                           # creates/refreshes .venv from uv.lock; nothing to activate
+uv run ruff check .
+uv run pytest -q
 
 # If the repo touches Google APIs (rems-sync, etc.):
 gcloud auth application-default login
@@ -80,24 +77,28 @@ commits rather than amending already-pushed ones.
 
 ## 5. Quality gates (Python repos)
 
-- Lint: `ruff check .` (config in each repo's `pyproject.toml`). Auto-fix with `--fix`.
-- Tests: `pytest -q`. Add coverage for new behaviour and regressions.
+- Lint: `uv run ruff check .` (config in each repo's `pyproject.toml`). Auto-fix with `--fix`.
+- Tests: `uv run pytest -q`. Add coverage for new behaviour and regressions.
 - CI: each repo's `ci.yml` calls
   [`swimblocks/.github/.github/workflows/reusable-python-ci.yml@main`](.github/workflows/reusable-python-ci.yml).
 
 ## 6. Dependencies
 
-- `requirements.txt`: direct runtime + test deps only, UTF-8, `>=` minimums. No full `pip
-  freeze` output, no transitive pins.
-- `requirements-dev.txt`: layered on top, adds dev-only tools (e.g. `ruff`).
+- **`uv` manages dependencies.** Direct runtime deps go in `pyproject.toml` under
+  `[project] dependencies` with `>=` minimums; dev-only tools (e.g. `ruff`, `pytest`) go in
+  `[dependency-groups] dev`. Commit `uv.lock` — it holds the transitive pins, and nobody
+  hand-edits it. Change deps with `uv add` / `uv remove` (add `--dev` for dev tools), which
+  re-lock for you.
+- *Legacy repos* still on `requirements.txt` / `requirements-dev.txt` keep working (the shared
+  CI detects which flow a repo uses) until they migrate. Don't start new work on that flow.
 - Dependabot config lives **per repo** at `.github/dependabot.yml` (no org-wide inheritance).
-- **venv in persistent/shared environments, not ephemeral CI.** On a laptop or in a
-  devcontainer/Codespace, work inside `.venv` (`python -m venv .venv`, then
-  `pip install -r requirements-dev.txt`) — don't install into the global interpreter. A repo's
-  devcontainer should provision this via `postCreateCommand`. CI runners are throwaway and
-  single-job, so they install globally on purpose. Full rationale:
-  [CONTRIBUTING.md](CONTRIBUTING.md#environments-venv) /
-  [`docs/design/0002-venv-standard.md`](docs/design/0002-venv-standard.md).
+- **Never install project dependencies into the global interpreter.** `uv sync` and `uv run`
+  always use the project's `.venv` (creating it if missing), so there is nothing to activate —
+  just don't reach for a bare `pip install`. A repo's devcontainer should run `uv sync` via
+  `postCreateCommand`. Full rationale:
+  [CONTRIBUTING.md](CONTRIBUTING.md#environments-uv) /
+  [`docs/design/0004-uv-standard.md`](docs/design/0004-uv-standard.md) (which supersedes the
+  pip mechanism in [0002](docs/design/0002-venv-standard.md)).
 
 ## 7. Secrets, data, and PII
 
