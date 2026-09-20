@@ -1,6 +1,7 @@
 # 0002 — venv standard + devcontainer provisioning
 
-Status: implemented
+Status: implemented — the rule stands; the pip mechanism (and no-venv-on-CI) is superseded by
+[0004](0004-uv-standard.md)
 
 ## Context
 
