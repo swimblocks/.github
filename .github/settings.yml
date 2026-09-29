@@ -1,7 +1,7 @@
 # SwimBlocks org-wide repo defaults — single source of truth.
 #
 # Shipped as a weekly `settings-YYYY-MM-DD` release and applied by
-# `scripts/apply-settings.py` (called from `.github/workflows/rollout.yml` for
+# `scripts/apply_settings.py` (called from `.github/workflows/rollout.yml` for
 # the whole org, and from `scripts/create-repo.sh` when a new repo is created).
 #
 # Format follows the Probot "Settings" app YAML shape, so this file is
@@ -55,7 +55,7 @@ branches:
       required_conversation_resolution: true
 
 # Rulesets for public repos. GitHub Free supports repository-level rulesets on public repos.
-# apply-settings.py creates/updates these and removes the legacy branch protection when the
+# apply_settings.py creates/updates these and removes the legacy branch protection when the
 # repo is public. See https://github.com/swimblocks/.github/issues/11
 rulesets:
   - name: swimblocks-default

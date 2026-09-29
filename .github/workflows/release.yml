@@ -1,7 +1,7 @@
 name: release
 
 # Publishes the weekly settings release: a dated tag pinning `.github/settings.yml`
-# and `scripts/apply-settings.py` at the version the org is on. Publishing the
+# and `scripts/apply_settings.py` at the version the org is on. Publishing the
 # release is what starts `rollout.yml`.
 #
 # The weekly cadence is also a keepalive, and the release publishes whether or

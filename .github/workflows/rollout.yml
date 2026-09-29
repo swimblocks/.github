@@ -1,7 +1,7 @@
 name: rollout
 
 # Applies a settings release to every repo in the swimblocks org: checks out the
-# released tag and runs `scripts/apply-settings.py` across the org. Because it
+# released tag and runs `scripts/apply_settings.py` across the org. Because it
 # re-asserts every setting, it is also the drift check — a merge method flipped
 # through the GitHub UI is put back on the next rollout.
 #
@@ -86,11 +86,11 @@ jobs:
             echo "No repos found — app may lack visibility into the org."
             exit 1
           fi
-          # One repo's failure must not strand the rest: apply-settings.py
+          # One repo's failure must not strand the rest: apply_settings.py
           # accumulates failures and exits non-zero at the end, so the run still
           # goes red without stopping at the first bad repo.
           # shellcheck disable=SC2086
-          python scripts/apply-settings.py \
+          python scripts/apply_settings.py \
             --version "$TAG" \
             --summary-file "$GITHUB_STEP_SUMMARY" \
             $repos

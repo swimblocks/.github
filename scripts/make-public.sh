@@ -114,14 +114,14 @@ gh repo edit "$repo" --visibility public --accept-visibility-change-consequences
 # --- 8. wait for the visibility-flip lock to release ---------------------
 echo "==> Waiting for GitHub to release the temporary lock"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APPLY="python $SCRIPT_DIR/apply-settings.py"
+APPLY="python $SCRIPT_DIR/apply_settings.py"
 for i in $(seq 1 15); do
   if $APPLY "$repo" >/dev/null 2>&1; then
     echo "  (lock released after ${i} attempt(s))"
     break
   fi
   if [ "$i" -eq 15 ]; then
-    echo "FAIL: settings still not applicable after ${i} attempts. Try re-running apply-settings.py." >&2
+    echo "FAIL: settings still not applicable after ${i} attempts. Try re-running apply_settings.py." >&2
     exit 1
   fi
   sleep 2

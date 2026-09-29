@@ -1,9 +1,9 @@
-"""Unit tests for the pure helpers in scripts/apply-settings.py.
+"""Unit tests for the pure helpers in scripts/apply_settings.py.
 
-The script has a hyphen in its name, so it isn't importable as a normal
-module; load it by path via importlib. The functions under test
-(`patch_args`, `_flatten_protection`) are pure — no `gh`/network — so they
-run in CI without credentials.
+`scripts/` is not an installed package, so load the script by path via
+importlib rather than importing it. The functions under test (`patch_args`,
+`_flatten_protection`) are pure — no `gh`/network — so they run in CI without
+credentials.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import json
 import subprocess
 from pathlib import Path
 
-_MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "apply-settings.py"
+_MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "apply_settings.py"
 _spec = importlib.util.spec_from_file_location("apply_settings", _MODULE_PATH)
 apply_settings = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(apply_settings)

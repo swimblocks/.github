@@ -109,6 +109,23 @@ signing. Create new commits rather than amending already-pushed ones.
   Same rule for shell, YAML, etc. If you don't have an issue number yet, file one before the
   PR lands. Reviewers will (and have!) push back on bare TODOs.
 
+### Naming files and directories
+
+**`snake_case` for directories and source files. `kebab-case` for anything executable,
+repo names, documentation, and spellings an ecosystem has fixed.**
+
+- **`snake_case`** — directories, and source files in any language: `rules_engine/`,
+  `apply_settings.py`, `test_apply_settings.py`.
+- **`kebab-case`** — anything executable; repo names; documentation
+  (`0004-uv-standard.md`); ecosystem-fixed spellings (`requirements-dev.txt`).
+- **Leave alone** what a tool dictates: `README.md`, `CODEOWNERS`, `ISSUE_TEMPLATE/`,
+  `__init__.py`, `pyproject.toml`.
+
+**"Executable" means the executable bit is set in the filesystem**, not that something
+happens to be runnable via an interpreter — `scripts/apply_settings.py` is a source
+file, not an executable. Ruff's `EXE` rules keep a `.py` file's shebang and bit in
+agreement.
+
 ## Quality gates
 
 - **Lint:** Python repos use [ruff](https://docs.astral.sh/ruff/) with `select = ["E","F","I","W"]`.
@@ -303,7 +320,7 @@ That script is the canonical place where we accumulate pre-public checks. Curren
 5. Asks for typed confirmation.
 6. Flips visibility via `gh repo edit --visibility public`.
 7. Polls until GitHub releases the visibility-flip lock.
-8. Re-runs `apply-settings.py`, which now installs branch protection.
+8. Re-runs `apply_settings.py`, which now installs branch protection.
 
 **When we learn something new is required before a repo can safely go public, that check goes
 into `make-public.sh`** rather than being remembered. Treat the script as a living checklist.
@@ -312,7 +329,7 @@ into `make-public.sh`** rather than being remembered. Treat the script as a livi
 
 If a repo's settings have drifted (or someone clicked through the GitHub UI), wait for the next
 weekly rollout, or run `rollout.yml` manually from the Actions tab on `swimblocks/.github`. For a
-single repo, `python scripts/apply-settings.py swimblocks/<repo>` does the same thing locally.
+single repo, `python scripts/apply_settings.py swimblocks/<repo>` does the same thing locally.
 
 ## Project scope
 

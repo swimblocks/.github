@@ -61,7 +61,7 @@ comfortably inside the 60-day window.
 ### `rollout.yml` — the effect
 
 `on: release: [published]` + `workflow_dispatch` + `repository_dispatch: [repo-created]`. It
-checks out the released tag and runs `apply-settings.py` across every repo in the org. It carries
+checks out the released tag and runs `apply_settings.py` across every repo in the org. It carries
 no `schedule`, so it is not disable-eligible at all: the path that actually changes repos cannot
 go dormant.
 
@@ -102,7 +102,7 @@ people come to the release page to download.)
 ### Version traceability
 
 Nothing on a repo records which settings version it is on, which is why `officials-admin` could
-sit unreconciled without anyone noticing. `apply-settings.py` gains `--version` and
+sit unreconciled without anyone noticing. `apply_settings.py` gains `--version` and
 `--summary-file`, and the rollout points the latter at `$GITHUB_STEP_SUMMARY`, so every run
 leaves a table of repo → result → version. The release page plus the run history become the audit
 trail.
@@ -149,7 +149,7 @@ Custom properties write. Both runbooks are in [`docs/reconciler.md`](../reconcil
 
 ## Open items
 
-- **Failure policy on rollout.** `apply-settings.py` accumulates failures and exits non-zero at
+- **Failure policy on rollout.** `apply_settings.py` accumulates failures and exits non-zero at
   the end rather than stopping at the first bad repo. That is deliberate for a rollout across
   many repos — one repo's 403 must not strand the rest — and is recorded here as the intended
   behaviour rather than an accident.
