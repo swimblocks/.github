@@ -14,7 +14,7 @@
 # (e.g. --description, --homepage, --license, --gitignore).
 #
 # After creation, the repo's settings are aligned with .github/settings.yml via
-# scripts/apply-settings.py. The result is verified before exit. Note: a
+# scripts/apply_settings.py. The result is verified before exit. Note: a
 # private repo on GitHub Free can't have branch protection — that part will
 # show as SKIP, which is expected and correct until make-public.sh runs.
 set -euo pipefail
@@ -47,7 +47,7 @@ done
 
 echo "==> Applying canonical settings"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-python "$SCRIPT_DIR/apply-settings.py" "$REPO"
+python "$SCRIPT_DIR/apply_settings.py" "$REPO"
 
 echo
 echo "Done. $REPO is live with org-wide defaults."

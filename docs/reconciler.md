@@ -18,7 +18,7 @@ is activity where a workflow run is not. See
 design.
 
 **`rollout.yml`** checks out a released tag and runs
-[`scripts/apply-settings.py`](../scripts/apply-settings.py) against every repo in the org. The
+[`scripts/apply_settings.py`](../scripts/apply_settings.py) against every repo in the org. The
 script reads `settings.yml` and PATCHes any drift in merge methods, labels, branch protection,
 and rulesets. Because it re-asserts every setting, it is also the drift check: anything changed
 through the GitHub UI is put back. It triggers:

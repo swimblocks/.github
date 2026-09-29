@@ -4,9 +4,17 @@
 # installed ruff version defaults to. With `ruff>=0.6` in requirements-dev.txt, a new
 # ruff release can therefore start failing CI on untouched code — which is exactly
 # what happened: main was green, and the next PR (docs only) went red on SIM102 and
-# PLW1510 findings in scripts/apply-settings.py.
+# PLW1510 findings in scripts/apply_settings.py.
 #
 # Pinning the rule selection instead of pinning ruff keeps the `>=` minimums policy
 # in section "Dependencies" intact while making the gate deterministic. Widening this
 # list is a deliberate policy change: do it in a PR that also fixes the findings.
-lint.select = ["E", "F", "I", "W"]
+#
+# EXE was added with the naming convention in CONTRIBUTING.md ("Naming files and
+# directories"), which makes the executable bit the test for what gets a kebab-case
+# name. EXE001/EXE002 keep the bit and the shebang agreeing with each other, so a
+# Python file cannot claim to be directly runnable without being marked as such, or
+# vice versa. Added in the same PR that fixed its findings, per the note above:
+# scripts/apply_settings.py lost a shebang it never earned, being invoked as
+# `python scripts/apply_settings.py`.
+lint.select = ["E", "EXE", "F", "I", "W"]

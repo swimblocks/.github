@@ -22,7 +22,7 @@ Organization-wide defaults for [SwimBlocks](https://github.com/swimblocks).
   to public (runs pre-public checks: secret scans of tree + history, required-files audit,
   then flips visibility and applies branch protection). This is the documented home for any
   pre-public step we learn we need.
-- [`scripts/apply-settings.py`](scripts/apply-settings.py) — applies `settings.yml` to a given
+- [`scripts/apply_settings.py`](scripts/apply_settings.py) — applies `settings.yml` to a given
   repo; used by the rollout workflow, `create-repo.sh`, and `make-public.sh`
 - [`scripts/install-local-agent-files.sh`](scripts/install-local-agent-files.sh) — writes the
   user-local agent pointer files (`~/src/AGENTS.md` etc.) so agents invoked outside any

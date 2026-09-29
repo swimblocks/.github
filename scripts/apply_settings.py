@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Apply SwimBlocks org-wide repo settings to one or more repos.
 
 Reads `.github/settings.yml` (Probot "Settings" app shape) and PATCHes the
@@ -7,12 +6,12 @@ workflow across the whole org, and by `scripts/create-repo.sh` at new-repo
 creation time.
 
 Usage:
-    python scripts/apply-settings.py owner/repo [owner/repo ...]
+    python scripts/apply_settings.py owner/repo [owner/repo ...]
 
 Inside the rollout workflow, where --version both records the tag on each repo
 as the `settings_version` custom property and names it in the job summary:
 
-    python scripts/apply-settings.py --version TAG --summary-file FILE owner/repo
+    python scripts/apply_settings.py --version TAG --summary-file FILE owner/repo
 
 Requires the `gh` CLI authenticated with a token that has admin rights on the
 target repo(s), plus Custom properties write to record the version. Inside the
@@ -406,7 +405,7 @@ def summary_table(version: str, repos: list[str], failures: list[str]) -> str:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="apply-settings.py",
+        prog="apply_settings.py",
         description="Apply .github/settings.yml to one or more repos.",
     )
     parser.add_argument("repos", nargs="+", metavar="owner/repo")
