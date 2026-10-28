@@ -70,17 +70,31 @@ commits rather than amending already-pushed ones.
 
 ### Acting in the author's name
 
-You work through the author's accounts, so what you post or overwrite reads as theirs. Full
-rule: [CONTRIBUTING.md](CONTRIBUTING.md#acting-in-the-authors-name).
+You work through the author's accounts: `gh`, `gcloud`, a tool's saved login. Whatever you
+post, overwrite or change there appears as the author's own doing, to people who will read
+it as the author's words. Closing an issue does not un-post it.
 
-- **Draft and ask first** for issues, comments, review replies, issue or PR body edits, and
-  writes to shared documents or sheets. Show the exact text; post on a yes.
-- **Ask first** before changing saved state: logging a tool in or out, replacing a credential.
-- **When the author asks, do it.** "Open the PR" means open it, not hand back a link.
-- **A yes covers one action.** It does not carry to the next post or run.
-- Committing, pushing a branch and reading need no pause.
-- No unasked-for status comments; report to the author directly.
-- Check the repo's own `CONTRIBUTING.md` for which of its commands need asking.
+- **Draft, then ask, before anything visible goes out in the author's name:** issues,
+  issue and PR comments, review replies, edits to an issue or PR body, and writes to shared
+  documents or sheets. Show the exact text, or say exactly what will be overwritten, and
+  wait for a yes. "File an issue for X" settles that the issue exists, not what it says.
+  Step 1's "open an issue first" is not the go-ahead either.
+- **Ask before changing the author's saved state:** logging a tool in or out, or replacing
+  a stored credential.
+- **When the author asks for it, that is the go-ahead.** "Open the PR" or "post the
+  replies" means do it, not hand back a link to click. Asking a second time reads as not
+  listening.
+- **A yes covers what was asked about, once.** Approving one post or one run does not
+  approve the next.
+- **No pause needed** for committing, pushing a branch, or reading what the task needs.
+  These are visible, but they are not phrased as the author's own statement.
+- **No unasked-for status comments.** Report finished work to the author directly, and let
+  them close their own issues.
+- **If a plan changes after something is posted,** say so promptly rather than quietly
+  cleaning up.
+
+A repo whose tools write somewhere shared lists which of its commands need asking first in
+its own `AGENTS.md`.
 
 ## 4. Code comments
 
