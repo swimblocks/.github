@@ -43,7 +43,8 @@ gcloud auth application-default login
 
 For **every** change:
 
-1. **Open a GitHub issue first.** Describe the change. This is the unit of work.
+1. **Open a GitHub issue first.** Describe the change. This is the unit of work. Draft it
+   for the author and post it on their yes (see [below](#acting-in-the-authors-name)).
    - *Exception:* a change small enough to explain itself — a typo, a doc clarification,
      recording a decision already made — may go straight to a PR. Label it `no-issue` and
      end the description with `NO-ISSUE: <short reason>`. Use a real issue whenever the
@@ -66,6 +67,20 @@ For **every** change:
 
 Do not push directly to `main`. Do not use `--no-verify` or otherwise skip hooks. Create new
 commits rather than amending already-pushed ones.
+
+### Acting in the author's name
+
+You work through the author's accounts, so what you post or overwrite reads as theirs. Full
+rule: [CONTRIBUTING.md](CONTRIBUTING.md#acting-in-the-authors-name).
+
+- **Draft and ask first** for issues, comments, review replies, issue or PR body edits, and
+  writes to shared documents or sheets. Show the exact text; post on a yes.
+- **Ask first** before changing saved state: logging a tool in or out, replacing a credential.
+- **When the author asks, do it.** "Open the PR" means open it, not hand back a link.
+- **A yes covers one action.** It does not carry to the next post or run.
+- Committing, pushing a branch and reading need no pause.
+- No unasked-for status comments; report to the author directly.
+- Check the repo's own `CONTRIBUTING.md` for which of its commands need asking.
 
 ## 4. Code comments
 
@@ -151,6 +166,6 @@ Edit `AGENTS.md`. The pointer files don't need changes.
 
 - **Don't widen scope.** If an issue says "fix X," fix X. Don't refactor unrelated code.
 - **Don't generalise away the Canada specifics.** They are load-bearing.
-- **Ask the human** in the issue/PR comments if a requirement is ambiguous, rather than
-  guessing.
+- **Ask the human** directly if a requirement is ambiguous, rather than guessing, and
+  not in issue or PR comments, which would post the question in their name.
 - For the full rationale of any rule above, read [CONTRIBUTING.md](CONTRIBUTING.md).

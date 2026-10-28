@@ -30,7 +30,8 @@ explicitly overrides it.
 
 1. **Open an issue first.** Describe the problem or feature. This is the unit of work.
    See [the `no-issue` exception](#the-no-issue-exception) for changes small enough to
-   skip this.
+   skip this. An agent drafts the issue for its author to read before it is posted; see
+   [acting in the author's name](#acting-in-the-authors-name).
 2. **Branch** off `main`, named `<issue-number>-<short-slug>` (e.g. `42-fix-date-parsing`),
    or a descriptive slug when there is no issue.
 3. **Do the work.** Keep commits coherent. Run tests + lint locally before pushing.
@@ -56,6 +57,34 @@ explicitly overrides it.
 8. **Review & squash-merge.** The author reviews the PR and squash-merges it themselves, then
    deletes the branch. The squash commit message should carry the meaningful detail, not just
    the PR title.
+
+### Acting in the author's name
+
+An agent works through its author's accounts: `gh`, `gcloud`, a tool's saved login. Whatever
+it posts, overwrites or changes there appears as the author's own doing, to people who will
+read it as the author's words. Closing an issue does not un-post it.
+
+- **Draft, then ask, before anything visible goes out in the author's name:** issues,
+  issue and PR comments, review replies, edits to an issue or PR body, and writes to shared
+  documents or sheets. Show the exact text, or say exactly what will be overwritten, and
+  wait for a yes. "File an issue for X" settles that the issue exists, not what it says. A
+  documented step such as "open an issue first" is not the go-ahead either.
+- **Changes to the author's saved state need asking too:** logging a tool in or out, or
+  replacing a stored credential.
+- **When the author asks for it, that is the go-ahead.** "Open the PR" or "post the
+  replies" means do it, not hand back a link to click. Asking a second time reads as not
+  listening.
+- **A yes covers what was asked about, once.** Approving one post or one run does not
+  approve the next.
+- **No pause needed** for committing, pushing a branch, or reading what the task needs.
+  These are visible, but they are not phrased as the author's own statement.
+- **No unasked-for status comments.** Report finished work to the author directly, and let
+  them close their own issues.
+- **If a plan changes after something is posted,** say so promptly rather than quietly
+  cleaning up.
+
+A repo whose tools write somewhere shared says which of its commands need asking first, in
+its own `CONTRIBUTING.md`.
 
 ### The `no-issue` exception
 
