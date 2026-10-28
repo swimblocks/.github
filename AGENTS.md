@@ -93,8 +93,9 @@ it as the author's words. Closing an issue does not un-post it.
 - **If a plan changes after something is posted,** say so promptly rather than quietly
   cleaning up.
 
-A repo whose tools write somewhere shared lists which of its commands need asking first in
-its own `AGENTS.md`.
+A repo whose own commands can post, overwrite something shared, or change saved state
+should say in its `AGENTS.md` which of them you may run without asking (`semotion-sync`
+does). Where a repo does not say, ask before running any command that does one of those.
 
 ## 4. Code comments
 
