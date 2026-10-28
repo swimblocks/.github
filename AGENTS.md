@@ -43,7 +43,8 @@ gcloud auth application-default login
 
 For **every** change:
 
-1. **Open a GitHub issue first.** Describe the change. This is the unit of work.
+1. **Open a GitHub issue first.** Describe the change. This is the unit of work. Draft it
+   for the author and post it on their yes (see [below](#acting-in-the-authors-name)).
    - *Exception:* a change small enough to explain itself — a typo, a doc clarification,
      recording a decision already made — may go straight to a PR. Label it `no-issue` and
      end the description with `NO-ISSUE: <short reason>`. Use a real issue whenever the
@@ -66,6 +67,35 @@ For **every** change:
 
 Do not push directly to `main`. Do not use `--no-verify` or otherwise skip hooks. Create new
 commits rather than amending already-pushed ones.
+
+### Acting in the author's name
+
+You work through the author's accounts: `gh`, `gcloud`, a tool's saved login. Whatever you
+post, overwrite or change there appears as the author's own doing, to people who will read
+it as the author's words. Closing an issue does not un-post it.
+
+- **Draft, then ask, before anything visible goes out in the author's name:** issues,
+  issue and PR comments, review replies, edits to an issue or PR body, and writes to shared
+  documents or sheets. Show the exact text, or say exactly what will be overwritten, and
+  wait for a yes. "File an issue for X" settles that the issue exists, not what it says.
+  Step 1's "open an issue first" is not the go-ahead either.
+- **Ask before changing the author's saved state:** logging a tool in or out, or replacing
+  a stored credential.
+- **When the author asks for it, that is the go-ahead.** "Open the PR" or "post the
+  replies" means do it, not hand back a link to click. Asking a second time reads as not
+  listening.
+- **A yes covers what was asked about, once.** Approving one post or one run does not
+  approve the next.
+- **No pause needed** for committing, pushing a branch, or reading what the task needs.
+  These are visible, but they are not phrased as the author's own statement.
+- **No unasked-for status comments.** Report finished work to the author directly, and let
+  them close their own issues.
+- **If a plan changes after something is posted,** say so promptly rather than quietly
+  cleaning up.
+
+A repo whose own commands can post, overwrite something shared, or change saved state
+should say in its `AGENTS.md` which of them you may run without asking (`semotion-sync`
+does). Where a repo does not say, ask before running any command that does one of those.
 
 ## 4. Code comments
 
@@ -151,6 +181,6 @@ Edit `AGENTS.md`. The pointer files don't need changes.
 
 - **Don't widen scope.** If an issue says "fix X," fix X. Don't refactor unrelated code.
 - **Don't generalise away the Canada specifics.** They are load-bearing.
-- **Ask the human** in the issue/PR comments if a requirement is ambiguous, rather than
-  guessing.
+- **Ask the human** directly if a requirement is ambiguous, rather than guessing, and
+  not in issue or PR comments, which would post the question in their name.
 - For the full rationale of any rule above, read [CONTRIBUTING.md](CONTRIBUTING.md).
