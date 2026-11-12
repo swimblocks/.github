@@ -52,7 +52,9 @@ Python is not being replaced.
   golangci-lint run
   ```
 
-- **No vendoring.** `go.sum` is committed and is the lock, as `uv.lock` is for Python.
+- **No vendoring.** Commit `go.mod` and `go.sum`. Go selects dependency versions from the
+  module graph using minimal version selection; `go.sum` records checksums used to verify
+  downloaded modules, rather than locking dependency versions.
 
 ### Lint and format
 
