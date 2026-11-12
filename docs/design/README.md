@@ -16,3 +16,4 @@ sequential, never reused.
 | [0003](0003-settings-releases-and-rollout.md) | Settings as a versioned release, rolled out weekly | implemented |
 | [0004](0004-uv-standard.md) | uv as the org Python toolchain | proposed |
 | [0005](0005-go-standard.md) | Go as an org language | proposed |
+| [0006](0006-aep-apis.md) | APIs follow the AEPs | proposed |
