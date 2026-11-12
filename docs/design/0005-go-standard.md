@@ -138,7 +138,8 @@ into [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
 - `CONTRIBUTING.md` gains Go alongside Python under Quality gates, Dependencies and
   Environments; `docs/development.md` lists Go and golangci-lint as prerequisites for Go repos.
-- `reusable-go-ci.yml` lands with this record.
+- `reusable-go-ci.yml` follows this record, under
+  [#63](https://github.com/swimblocks/.github/issues/63).
 - `scripts/create-repo.sh` prints the Go CI caller as well as the Python one in its next steps,
   and says to start on the current stable Go release.
 - **`swimblocks/fetch-service` is the first Go repo**, and its CI is the first real exercise of
@@ -146,9 +147,8 @@ into [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
 ## Verification
 
-- `actionlint` passes on `reusable-go-ci.yml`.
-- **Not yet verified:** the workflow on a real runner. That happens with `fetch-service`'s first
-  PR.
+- **Pending, with the workflow under #63:** `actionlint` passes on `reusable-go-ci.yml`, and
+  the workflow runs green on a real runner, first with `fetch-service`'s first PR.
 
 ## Open items
 
