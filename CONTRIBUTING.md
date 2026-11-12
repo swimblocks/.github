@@ -128,7 +128,7 @@ agreement.
 
 ## Quality gates
 
-- **Lint:** Python repos use [ruff](https://docs.astral.sh/ruff/) with `select = ["E","F","I","W"]`.
+- **Lint:** Python repos use [ruff](https://docs.astral.sh/ruff/) with `select = ["E","EXE","F","I","W"]`.
   Run `uv run ruff check .` (and `uv run ruff check --fix .` to auto-fix) before pushing.
 - **Tests:** `uv run pytest -q`. Add coverage for new behaviour and regressions.
 - **CI:** Python repos call the shared reusable workflow — see
