@@ -242,9 +242,11 @@ each finding as an inline comment.
   `pull-requests: read` — plus `id-token: write`, which the action needs to exchange for the
   Claude GitHub App's token; the comments are posted with that App token. A job timeout, and one
   review in flight per pull request.
-- **Credential:** an org-level Actions secret. The workflow accepts either an API key
-  (`ANTHROPIC_API_KEY`) or a token from `claude setup-token` (`CLAUDE_CODE_OAUTH_TOKEN`), so the
-  credential can change without changing any repo.
+- **Credential:** an Actions secret, either an API key (`ANTHROPIC_API_KEY`) or a token from
+  `claude setup-token` (`CLAUDE_CODE_OAUTH_TOKEN`); the workflow accepts either, so the
+  credential can change without changing any repo. Public repos share one org-level secret.
+  GitHub Free doesn't give private repos access to org-level secrets, so each private repo
+  holds its own copy.
 
 There is one copy of the style guide, here; a change to it applies to every repo's next review
 with nothing to sync.
@@ -396,6 +398,12 @@ them replies in the thread with what changed.
 
 ## Open items
 
+- **The model credential is a long-lived token in a secret**, the kind of credential
+  [0001](0001-github-app-reconciler.md) replaced with GitHub Apps for GitHub access — and on
+  GitHub Free, one copy per private repo. Workload identity federation removes it: the action
+  exchanges the workflow's OIDC token for short-lived access through a Claude Console service
+  account, with nothing stored. Switch to it once the review has shown its worth; only the
+  workflow's authentication inputs change.
 - **CI isn't a required check either.** The org ruleset requires no status checks today, so a
   red CI run doesn't block a merge any more than a missing review would. Requiring CI belongs
   with the review check, in the same ruleset change, but is its own decision.

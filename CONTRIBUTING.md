@@ -268,7 +268,9 @@ A pull request is reviewed once, when it is opened or marked ready for review, a
 guide for the languages it changes. Findings are inline comments from the Claude GitHub App, and
 the review ends with a summary comment saying how many it posted. It runs again on each push
 only to confirm the review has happened. Drafts, fork pull requests and pull requests from bots
-are skipped.
+are skipped. It needs the Claude GitHub App on the repo and a `CLAUDE_CODE_OAUTH_TOKEN` or
+`ANTHROPIC_API_KEY` secret: the org-level one reaches public repos, but on GitHub Free a private
+repo needs its own copy.
 
 Answer every finding: change the code, or reply saying why not, then resolve the thread.
 A finding you reject is as useful as one you accept: the planned calibration report

@@ -22,8 +22,10 @@ name: reusable-readability-review
 # present on the latest commit, but after the first review it finds the review's summary
 # comment and succeeds without reviewing again.
 #
-# It needs, once per org: the Claude GitHub App installed on the repo, and one of the org
-# Actions secrets ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.
+# It needs the Claude GitHub App installed on the repo, and an Actions secret named
+# ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN: one org-level secret serves the public repos,
+# but GitHub Free doesn't give private repos org-level secrets, so each private repo holds
+# its own copy.
 
 on:
   workflow_call:
