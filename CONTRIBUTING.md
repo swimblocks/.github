@@ -131,18 +131,92 @@ agreement.
 - **Lint (Python):** Python repos use [ruff](https://docs.astral.sh/ruff/) with `select = ["E","EXE","F","I","W"]`.
   Run `uv run ruff check .` (and `uv run ruff check --fix .` to auto-fix) before pushing.
 - **Lint (Go):** Go repos use [golangci-lint](https://golangci-lint.run/) v2, configured by a
-  committed `.golangci.yml`. Every Go repo carries the same one:
+  committed `.golangci.yml`. Every Go repo carries the same one, unchanged:
 
   ```yaml
   version: "2"
   linters:
-    default: standard        # errcheck, govet, ineffassign, staticcheck, unused
+    default: all
+    disable:
+      # Contradict the Google Go Style Guide.
+      - decorder          # orders declarations by kind; the guide orders them for the reader
+      - err113            # a sentinel for every error; the guide: only when callers must tell errors apart
+      - exhaustruct       # every field set; the guide: make the zero value useful
+      - exhaustruct_v5
+      - funcorder         # exported methods first; the guide orders for the reader
+      - noinlineerr       # forbids `if err := f(); err != nil`, an idiom the guide uses
+      - nonamedreturns    # the guide allows named results where they document
+      - paralleltest      # t.Parallel() everywhere; tparallel checks the tests that do use it
+      - perfsprint        # trades clarity for speed; the guide puts clarity first
+      - prealloc          # likewise
+      - testpackage       # black-box tests only; in-package tests are normal Go
+      - varnamelen        # long names in small scopes; the guide prefers short ones there
+      - wrapcheck         # wrap every error; the guide: wrap when it adds context
+      # Size and repetition thresholds.
+      - cyclop
+      - dogsled
+      - dupl
+      - funlen
+      - gocognit
+      - goconst
+      - gocyclo
+      - interfacebloat
+      - lll
+      - maintidx
+      - mnd
+      - nestif
+      # Blank lines and alignment: the formatter's business.
+      - nlreturn
+      - tagalign
+      - whitespace
+      - wsl
+      - wsl_v5
+      # Mean nothing until the org writes their configuration.
+      - depguard          # which packages may be imported
+      - goheader          # a required file header
+      - gomodguard        # which modules may be required
+      - gomodguard_v2
+      - grouper           # whether declarations are grouped
+      - importas          # required import aliases
+      # Other.
+      - godox             # flags every TODO, including those that link an issue as CONTRIBUTING requires
+      - tagliatelle       # one casing for struct tags; wire formats follow the spec they implement
+    settings:
+      exhaustive:
+        default-signifies-exhaustive: true   # a `default:` case is a deliberate choice
+      gosec:
+        excludes: [G104]                     # unchecked errors: errcheck's job already
+      nolintlint:
+        require-explanation: true
+        require-specific: true
+      revive:
+        enable-default-rules: true
+        rules:
+          - name: unused-parameter           # fires on every handler whose signature is fixed
+            disabled: true
+    exclusions:
+      rules:
+        # In a test, a panicking type assertion is the test failing, and test inputs aren't attacker-controlled.
+        - path: _test\.go
+          linters: [forcetypeassert, gosec]
   formatters:
     enable: [gofmt, goimports]
   ```
 
-  Additions go here, in the org standard, not in one repo's config. Run `golangci-lint run`
-  (and `golangci-lint run --fix` to auto-fix) before pushing.
+  **Every linter is on unless the disable list says why not.** A linter is off only if it
+  contradicts the [Google Go Style Guide](https://google.github.io/styleguide/go/), is a size
+  or repetition threshold, is a blank-line or alignment preference, or means nothing until the
+  org writes configuration for it. A linter for a library we don't use stays on; it is silent
+  until the library arrives. The disable list is the only record of what is off, and a change
+  to it, or to anything else in this file, is a change to the org standard, made here.
+
+  **A finding that is wrong in context is suppressed on its line, with the reason** —
+  `//nolint:bodyclose // the call owns the response and closes it in close()` — not by
+  switching the linter off. `nolintlint` rejects a suppression that names no linter or gives no
+  reason. Suppressions are data: the weekly calibration report reads them to suggest changes to
+  this list ([design 0007](docs/design/0007-review-standard.md)).
+
+  Run `golangci-lint run` (and `golangci-lint run --fix` to auto-fix) before pushing.
 - **Tests:** `uv run pytest -q`; in Go repos, `go test ./...`. Add coverage for new behaviour
   and regressions.
 - **CI:** each repo calls the shared reusable workflow for its language —
@@ -159,6 +233,15 @@ agreement.
   The Go workflow checks `go mod tidy -diff`, then runs `go build ./...`, `go test -race ./...`
   and golangci-lint at a pinned version. Repo-specific gates (a coverage floor, an image
   build) go in further jobs in the repo's own `ci.yml`, beside the call.
+
+## Code review
+
+Lint covers what is mechanical. For readability, reviewers — human or automatic — apply the
+org style guide in [`docs/styleguide/`](docs/styleguide/README.md): a few points for every
+language, then one file per language, built on Google's
+[Go](https://google.github.io/styleguide/go/) and
+[Python](https://google.github.io/styleguide/pyguide.html) style guides. A review comment starts
+with the ID of the point it applies (`[go/errors]`), so the author can check the reasoning.
 
 ## Dependencies
 
