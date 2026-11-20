@@ -79,6 +79,9 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ steps.version.outputs.tag }}
+          # The values of settings.yml's actions_secrets, copied into every repo.
+          SWIMBLOCKS_CI_WIF_PROVIDER: ${{ secrets.SWIMBLOCKS_CI_WIF_PROVIDER }}
+          SWIMBLOCKS_CI_REVIEW_SECRET: ${{ secrets.SWIMBLOCKS_CI_REVIEW_SECRET }}
         run: |
           set -euo pipefail
           repos=$(gh repo list swimblocks --limit 200 --json nameWithOwner --jq '.[].nameWithOwner')
@@ -92,5 +95,6 @@ jobs:
           # shellcheck disable=SC2086
           python scripts/apply_settings.py \
             --version "$TAG" \
+            --require-secrets \
             --summary-file "$GITHUB_STEP_SUMMARY" \
             $repos

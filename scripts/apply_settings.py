@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -202,6 +203,79 @@ def verify_labels(repo: str, labels_block: list[dict]) -> bool:
             print(f"  OK  label '{name}': present")
         else:
             print(f"  FAIL label '{name}': missing")
+            ok = False
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# Actions secrets
+#
+# GitHub Free doesn't give private repos the org's Actions secrets, so the
+# rollout copies the ones `actions_secrets:` lists into every repo. Each value
+# is read from the environment variable of the same name, which rollout.yml
+# fills from swimblocks/.github's own secrets.
+# ---------------------------------------------------------------------------
+
+def secret_values(
+    secrets_block: list[dict], env: dict[str, str]
+) -> tuple[dict[str, str], list[str]]:
+    """The value for each listed secret from *env*, and the names *env* lacks."""
+    values: dict[str, str] = {}
+    missing: list[str] = []
+    for entry in secrets_block:
+        name = entry.get("name")
+        if not name:
+            continue
+        value = env.get(name, "")
+        if value:
+            values[name] = value
+        else:
+            missing.append(name)
+    return values, missing
+
+
+def apply_secrets(repo: str, values: dict[str, str]) -> bool:
+    """Set each secret in *values* on *repo*. Returns False on failure.
+
+    The value goes to `gh secret set` on stdin, never on the command line, and
+    is never printed. A secret can't be read back, so it is written every run
+    rather than compared, and verify_secrets checks only that it exists.
+    """
+    ok = True
+    for name, value in values.items():
+        try:
+            subprocess.run(
+                ["gh", "secret", "set", name, "--repo", repo, "--app", "actions"],
+                input=value, text=True,
+                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            )
+            print(f"  OK  secret '{name}': set")
+        except subprocess.CalledProcessError as e:
+            print(f"  FAIL secret '{name}': set failed{gh_error(e)}")
+            ok = False
+    return ok
+
+
+def verify_secrets(repo: str, names: list[str]) -> bool:
+    """Confirm each secret in *names* exists on *repo*."""
+    if not names:
+        return True
+    try:
+        out = subprocess.run(
+            ["gh", "secret", "list", "--repo", repo, "--app", "actions",
+             "--json", "name", "--jq", ".[].name"],
+            check=True, capture_output=True, text=True,
+        ).stdout
+    except subprocess.CalledProcessError as e:
+        print(f"  FAIL secrets: could not list{gh_error(e)}")
+        return False
+    present = set(out.split())
+    ok = True
+    for name in names:
+        if name in present:
+            print(f"  OK  secret '{name}': present")
+        else:
+            print(f"  FAIL secret '{name}': missing")
             ok = False
     return ok
 
@@ -415,6 +489,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
              "the settings_version custom property, and named in the summary.",
     )
     parser.add_argument(
+        "--require-secrets", action="store_true",
+        help="Fail a repo when a secret settings.yml lists has no value in the "
+             "environment. The rollout sets this; a local run, which has no "
+             "secrets to copy, skips them instead.",
+    )
+    parser.add_argument(
         "--summary-file",
         help="Append the run summary table to this file (e.g. $GITHUB_STEP_SUMMARY).",
     )
@@ -435,6 +515,8 @@ def main(argv: list[str]) -> int:
 
     rulesets_block = settings.get("rulesets") or []
     labels_block = settings.get("labels") or []
+    secret_vals, secrets_missing = secret_values(
+        settings.get("actions_secrets") or [], dict(os.environ))
 
     failures: list[str] = []
     for repo in opts.repos:
@@ -451,6 +533,23 @@ def main(argv: list[str]) -> int:
             if labels_ok:
                 labels_ok = verify_labels(repo, labels_block)
             if not labels_ok and repo not in failures:
+                failures.append(repo)
+
+        # Secrets too: private repos are the reason they're copied at all.
+        if secrets_missing:
+            if opts.require_secrets:
+                print(f"  FAIL secrets: no value in the environment for "
+                      f"{', '.join(secrets_missing)}")
+                if repo not in failures:
+                    failures.append(repo)
+            else:
+                print(f"  SKIP secrets: no value in the environment for "
+                      f"{', '.join(secrets_missing)}; the rollout copies them")
+        if secret_vals:
+            secrets_ok = apply_secrets(repo, secret_vals)
+            if secrets_ok:
+                secrets_ok = verify_secrets(repo, list(secret_vals))
+            if not secrets_ok and repo not in failures:
                 failures.append(repo)
 
         is_public = get_repo_visibility(repo) == "public"

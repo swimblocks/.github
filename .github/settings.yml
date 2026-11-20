@@ -33,6 +33,17 @@ labels:
     color: ededed
     description: Change small enough to skip the issue-first rule; rationale is in the PR body
 
+# Actions secrets copied into every repo. GitHub Free doesn't give private repos the org's
+# secrets, so the rollout copies them instead: each value comes from the secret of the same
+# name on swimblocks/.github, which rollout.yml passes in. Names only here, never values.
+# A secret's value can't be read back, so each rollout rewrites it rather than checking it.
+actions_secrets:
+  # The readability review's sign-in to the org's devops Google Cloud project, and the
+  # Secret Manager secret it reads there (design 0007). Identifiers rather than credentials,
+  # kept out of the public workflow file and masked in logs.
+  - name: SWIMBLOCKS_CI_WIF_PROVIDER
+  - name: SWIMBLOCKS_CI_REVIEW_SECRET
+
 # Branch protection for public repos is handled via GitHub Rulesets (see `rulesets:` below),
 # which support bypass actors so org owners and repo admins can force-push without extra steps
 # — just `git push origin main --force`. GitHub records the bypass in the audit log.
