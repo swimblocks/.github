@@ -143,6 +143,16 @@ Standard SwimBlocks dev box:
 - **`ruff`** and **`pytest`** are installed per-repo by `uv sync` (they live in each repo's
   `pyproject.toml` dev group). Repos not yet migrated to `uv` still use `requirements-dev.txt`.
 
+For Go repos (`fetch-service`), also:
+
+- **[Go](https://go.dev/dl/)**, the current stable release. The repo's `go.mod` names the
+  version it needs; a newer local toolchain builds it, and an older one fetches the right
+  one itself.
+- **[golangci-lint](https://golangci-lint.run/welcome/install/#local-installation)** v2, at
+  the version the [reusable Go CI](../.github/workflows/reusable-go-ci.yml) pins, so local
+  lint results match CI's. Install the release binary rather than with `go install`, which
+  golangci-lint doesn't support.
+
 See each repo's own README for repo-specific setup beyond this.
 
 ## Out of scope for this doc
