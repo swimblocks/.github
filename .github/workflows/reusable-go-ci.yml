@@ -1,0 +1,59 @@
+name: reusable-go-ci
+
+# Shared Go CI for SwimBlocks repos (docs/design/0005-go-standard.md). Call it from a
+# repo's own ci.yml:
+#
+#   jobs:
+#     ci:
+#       uses: swimblocks/.github/.github/workflows/reusable-go-ci.yml@main
+#
+# Optionally override inputs:
+#   with:
+#     run-lint: true
+#
+# The Go version is not an input: go.mod's `go` directive is the single source of truth,
+# and setup-go reads it. The linter configuration is the repo's committed .golangci.yml.
+#
+# Repo-specific gates (a coverage floor, generated-code checks, an image build) stay in the
+# repo's own ci.yml as further jobs beside this one.
+
+on:
+  workflow_call:
+    inputs:
+      golangci-lint-version:
+        description: golangci-lint release to run. Pinned so a new release cannot fail a PR unannounced.
+        type: string
+        default: v2.15.0
+      run-lint:
+        description: Whether to run golangci-lint
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Module files are tidy
+        # Fails when go.mod or go.sum is out of date, the counterpart of `uv sync --locked`.
+        run: go mod tidy -diff
+
+      - name: Build
+        run: go build ./...
+
+      - name: Tests
+        run: go test -race ./...
+
+      - name: Lint (golangci-lint)
+        if: ${{ inputs.run-lint }}
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ inputs.golangci-lint-version }}
