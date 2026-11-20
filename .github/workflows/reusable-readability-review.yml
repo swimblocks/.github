@@ -23,7 +23,7 @@ name: reusable-readability-review
 # comment and succeeds without reviewing again.
 #
 # The model token lives in Secret Manager in the org's devops Google Cloud project
-# (swimblocks/.github-private, terraform/devops). The workflow signs in over OIDC and reads it;
+# (swimblocks/.github-private, terraform/). The workflow signs in over OIDC and reads it;
 # the identity provider admits only this workflow, from this repo's main. Where to sign in
 # comes from two repo secrets the settings rollout copies into every repo
 # (docs/reconciler.md). The Claude GitHub App must be installed on the repo.
