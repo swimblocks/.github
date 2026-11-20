@@ -7,9 +7,9 @@ Go code follows the [Google Go Style Guide](https://google.github.io/styleguide/
 authority — and [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments). Their ID here
 is `go/google`.
 
-On top of the [general points](README.md) and the org's golangci-lint set
-([CONTRIBUTING.md](../../CONTRIBUTING.md#quality-gates)), these are the points SwimBlocks Go
-code is most often held to.
+The org's golangci-lint set ([CONTRIBUTING.md](../../CONTRIBUTING.md#quality-gates)) enforces
+the parts of these guides a machine can check. Beyond the [general points](README.md), these are
+the ones that take judgement and that SwimBlocks Go code is most often held to.
 
 ## Packages
 

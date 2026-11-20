@@ -6,9 +6,11 @@ each language adds its own:
 - [Go](go.md)
 - [Python](python.md)
 
-**Lint is part of the style.** Code passes the org lint set for its language
-([CONTRIBUTING.md](../../CONTRIBUTING.md#quality-gates)), and what a linter checks isn't
-repeated here. This guide covers what takes judgement.
+**Lint enforces this guide.** The org lint set for each language
+([CONTRIBUTING.md](../../CONTRIBUTING.md#quality-gates)) is how the parts of the style a machine
+can check get checked. Those rules are part of the style all the same; they just aren't written
+out here, because the lint configuration already records them and a page listing hundreds of
+checks would go unread. What's written here is the part that takes judgement.
 
 Each point has an ID made of its file and heading — `general/names`, `go/errors` — so a review
 comment can say which point it applies.
