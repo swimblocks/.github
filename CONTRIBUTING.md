@@ -128,18 +128,37 @@ agreement.
 
 ## Quality gates
 
-- **Lint:** Python repos use [ruff](https://docs.astral.sh/ruff/) with `select = ["E","EXE","F","I","W"]`.
+- **Lint (Python):** Python repos use [ruff](https://docs.astral.sh/ruff/) with `select = ["E","EXE","F","I","W"]`.
   Run `uv run ruff check .` (and `uv run ruff check --fix .` to auto-fix) before pushing.
-- **Tests:** `uv run pytest -q`. Add coverage for new behaviour and regressions.
-- **CI:** Python repos call the shared reusable workflow — see
-  [`.github/workflows/reusable-python-ci.yml`](.github/workflows/reusable-python-ci.yml).
-  A repo's own `ci.yml` should be a thin caller:
+- **Lint (Go):** Go repos use [golangci-lint](https://golangci-lint.run/) v2, configured by a
+  committed `.golangci.yml`. Every Go repo carries the same one:
+
+  ```yaml
+  version: "2"
+  linters:
+    default: standard        # errcheck, govet, ineffassign, staticcheck, unused
+  formatters:
+    enable: [gofmt, goimports]
+  ```
+
+  Additions go here, in the org standard, not in one repo's config. Run `golangci-lint run`
+  (and `golangci-lint run --fix` to auto-fix) before pushing.
+- **Tests:** `uv run pytest -q`; in Go repos, `go test ./...`. Add coverage for new behaviour
+  and regressions.
+- **CI:** each repo calls the shared reusable workflow for its language —
+  [`reusable-python-ci.yml`](.github/workflows/reusable-python-ci.yml) or
+  [`reusable-go-ci.yml`](.github/workflows/reusable-go-ci.yml). A repo's own `ci.yml` should
+  be a thin caller:
 
   ```yaml
   jobs:
     ci:
-      uses: swimblocks/.github/.github/workflows/reusable-python-ci.yml@main
+      uses: swimblocks/.github/.github/workflows/reusable-python-ci.yml@main   # or reusable-go-ci.yml
   ```
+
+  The Go workflow checks `go mod tidy -diff`, then runs `go build ./...`, `go test -race ./...`
+  and golangci-lint at a pinned version. Repo-specific gates (a coverage floor, an image
+  build) go in further jobs in the repo's own `ci.yml`, beside the call.
 
 ## Dependencies
 
@@ -155,9 +174,13 @@ agreement.
   CI runs the pip flow whenever there is no `uv.lock`. New repos start on `uv`; existing ones
   migrate under their own issue. See
   [`docs/design/0004-uv-standard.md`](docs/design/0004-uv-standard.md).
+- Go repos use Go modules. **Commit `go.mod` and `go.sum`**, and don't vendor. Change
+  dependencies with `go get` and `go mod tidy`; CI runs `go mod tidy -diff`, which fails a PR
+  whose `go.mod` or `go.sum` is out of date. The module path is `github.com/swimblocks/<repo>`.
 - Dependabot config lives **per repo** at `.github/dependabot.yml` (GitHub has no org-wide
   Dependabot inheritance). Weekly `uv` (or `pip`, for a legacy repo) + github-actions updates
-  is the default.
+  is the default; Go repos use `gomod` + github-actions, plus `docker` when there is a
+  `Dockerfile`.
 
 ## Environments (uv)
 
@@ -182,6 +205,26 @@ Rationale and the cross-repo rollout are in
 [`docs/design/0004-uv-standard.md`](docs/design/0004-uv-standard.md); it supersedes the pip
 mechanism, and the no-venv-on-CI exception, in
 [`0002`](docs/design/0002-venv-standard.md).
+
+## Environments (Go)
+
+Go repos build on **the current stable Go release**. The standard names no version number;
+in each repo, `go.mod`'s `go` directive is the single source of truth. CI reads it, and nobody
+repeats the version anywhere else. Go supports the two most recent releases, so a repo moves
+to a new one within six months of its release; Dependabot's `gomod` updates prompt it.
+
+Go keeps dependencies in a per-user module cache rather than in a global install, so there is
+nothing to isolate per project. The same commands run locally and in CI:
+
+```bash
+go build ./...
+go test ./...
+golangci-lint run
+```
+
+Install golangci-lint at the version [`reusable-go-ci.yml`](.github/workflows/reusable-go-ci.yml)
+pins, so local results match CI's. Rationale, project layout and naming are in
+[`docs/design/0005-go-standard.md`](docs/design/0005-go-standard.md).
 
 ## Secrets & data
 

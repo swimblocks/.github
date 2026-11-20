@@ -105,12 +105,25 @@ does). Where a repo does not say, ask before running any command that does one o
   Reviewers will push back on bare TODOs. Full rationale in
   [CONTRIBUTING.md](CONTRIBUTING.md#code-comments).
 
-## 5. Quality gates (Python repos)
+## 5. Quality gates
+
+**Python repos:**
 
 - Lint: `uv run ruff check .` (config in each repo's `pyproject.toml`). Auto-fix with `--fix`.
 - Tests: `uv run pytest -q`. Add coverage for new behaviour and regressions.
 - CI: each repo's `ci.yml` calls
   [`swimblocks/.github/.github/workflows/reusable-python-ci.yml@main`](.github/workflows/reusable-python-ci.yml).
+
+**Go repos** (`fetch-service`):
+
+- Lint: `golangci-lint run` (config in the repo's `.golangci.yml`, which carries the org set
+  from [CONTRIBUTING.md](CONTRIBUTING.md#quality-gates); don't add linters per repo).
+  Auto-fix with `--fix`.
+- Build and test: `go build ./...` and `go test ./...`. Keep `go.mod`/`go.sum` tidy
+  (`go mod tidy`); CI fails on `go mod tidy -diff`.
+- CI: each repo's `ci.yml` calls
+  [`swimblocks/.github/.github/workflows/reusable-go-ci.yml@main`](.github/workflows/reusable-go-ci.yml).
+- Go version: the current stable release, named only by `go.mod`'s `go` directive.
 
 ## 6. Dependencies
 
