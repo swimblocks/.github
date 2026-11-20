@@ -1,4 +1,4 @@
-# 0007 — Automatic code review and a stricter Go lint set
+# 0007 — Automatic readability review and a stricter Go lint set
 
 Status: proposed
 
@@ -12,205 +12,380 @@ but says almost nothing about readability, and `swimblocks/fetch-service` is abo
 the org its first substantial Go code. Nobody in the org has had their Go reviewed for
 readability before, so the bar has to be written down rather than carried in someone's head.
 
-Review today is whatever the maintainer and their agent notice. There is no written rubric
-for any language: `CONTRIBUTING.md` holds the house rules and folds in rules learned from
-review, but nothing says what a reviewer looks for beyond them. Nothing reviews a pull request
-unless someone remembers to ask for one, and a review run in a local session leaves nothing on
-the pull request.
+Review today is whatever the maintainer and their agent notice. Nothing reviews a pull request
+unless someone remembers to ask, and a review run in a local session leaves nothing on the
+pull request.
 
-Three layers, each doing what the others can't:
+Three layers, each doing what the others can't, and a loop that tunes them:
 
 - **Linters** check what is mechanical, on every push, for free.
-- **A written rubric** says what a reviewer checks beyond the linters — the judgment calls.
-- **An automatic reviewer** applies the rubric to every pull request without anyone
-  remembering to ask, and leaves its findings on the pull request where they stay.
+- **An org style guide** says what a reviewer checks beyond the linters.
+- **An automatic readability reviewer** applies the style guide to every pull request without
+  anyone remembering to ask, and leaves its findings on the pull request where they stay.
+- **A calibration report** watches where the linters are overruled and where the reviewer's
+  findings are accepted or rejected, and suggests changes to both. The two are tuned together:
+  a style point that keeps being raised and accepted belongs in a linter, so the reviewer can
+  spend its attention on what only judgement can catch.
+
+Correctness, security and design review are deliberately out of the reviewer's scope: CI, the
+agent's own pre-handoff review and the human reviewer cover them. A reviewer that does one
+thing, with little context beyond the change and the style guide, does it better.
 
 ## Design
 
 ### Go lint set
+
+**Everything is on unless there's a stated reason for it to be off.** The org `.golangci.yml`
+enables every golangci-lint linter and names the exceptions, each under the reason it's off. A
+linter is off only if it:
+
+- contradicts the [Google Go Style Guide](https://google.github.io/styleguide/go/) or
+  [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments);
+- is a size or repetition threshold — "this does too much" is a judgement the reviewer makes
+  better than a number does;
+- is a blank-line or alignment preference, which is the formatter's business; or
+- means nothing until the org writes configuration for it.
+
+A linter for a library we don't use stays on: it is silent until the library arrives, and then
+it is already checking. A linter that is wrong in a particular place is suppressed on that line,
+with the reason — `//nolint:bodyclose // the call owns the response and closes it in close()` —
+not switched off. `nolintlint` rejects a suppression that names no linter or gives no reason, so
+every suppression is a recorded judgement, which is what the
+[calibration report](#calibration-report) reads.
 
 The org `.golangci.yml` becomes:
 
 ```yaml
 version: "2"
 linters:
-  default: standard        # errcheck, govet, ineffassign, staticcheck, unused
-  enable:
-    - errorlint            # errors.Is/As, and %w when wrapping
-    - gocritic             # style and likely-mistake checks
-    - misspell
-    - modernize            # newer idioms: min/max, slices, strings.Cut, errors.AsType
-    - noctx                # requests and listeners carry a context
-    - nolintlint           # //nolint names its linter and is still needed
-    - revive               # golint's successor: doc comments, naming, receivers
-    - unparam              # parameters that always get the same value
-    - usestdlibvars        # http.StatusOK, not 200
+  default: all
+  disable:
+    # Contradict the Google Go Style Guide.
+    - decorder          # orders declarations by kind; the guide orders them for the reader
+    - err113            # a sentinel for every error; the guide: only when callers must tell errors apart
+    - exhaustruct       # every field set; the guide: make the zero value useful
+    - exhaustruct_v5
+    - funcorder         # exported methods first; the guide orders for the reader
+    - noinlineerr       # forbids `if err := f(); err != nil`, an idiom the guide uses
+    - nonamedreturns    # the guide allows named results where they document
+    - paralleltest      # t.Parallel() everywhere; tparallel checks the tests that do use it
+    - perfsprint        # trades clarity for speed; the guide puts clarity first
+    - prealloc          # likewise
+    - testpackage       # black-box tests only; in-package tests are normal Go
+    - varnamelen        # long names in small scopes; the guide prefers short ones there
+    - wrapcheck         # wrap every error; the guide: wrap when it adds context
+    # Size and repetition thresholds.
+    - cyclop
+    - dogsled
+    - dupl
+    - funlen
+    - gocognit
+    - goconst
+    - gocyclo
+    - interfacebloat
+    - lll
+    - maintidx
+    - mnd
+    - nestif
+    # Blank lines and alignment: the formatter's business.
+    - nlreturn
+    - tagalign
+    - whitespace
+    - wsl
+    - wsl_v5
+    # Mean nothing until the org writes their configuration.
+    - depguard          # which packages may be imported
+    - goheader          # a required file header
+    - gomodguard        # which modules may be required
+    - gomodguard_v2
+    - grouper           # whether declarations are grouped
+    - importas          # required import aliases
+    # Other.
+    - godox             # flags every TODO, including those that link an issue as CONTRIBUTING requires
+    - tagliatelle       # one casing for struct tags; wire formats follow the spec they implement
   settings:
+    exhaustive:
+      default-signifies-exhaustive: true   # a `default:` case is a deliberate choice
+    gosec:
+      excludes: [G104]                     # unchecked errors: errcheck's job already
+    nolintlint:
+      require-explanation: true
+      require-specific: true
     revive:
       enable-default-rules: true
       rules:
-        - name: unused-parameter
+        - name: unused-parameter           # fires on every handler whose signature is fixed
           disabled: true
+  exclusions:
+    rules:
+      # In a test, a panicking type assertion is the test failing, and test inputs aren't attacker-controlled.
+      - path: _test\.go
+        linters: [forcetypeassert, gosec]
 formatters:
   enable: [gofmt, goimports]
 ```
 
-As in 0005, the set is an org decision: a repo commits this file unchanged, and an addition
-or removal is a change to the org standard.
+The disable list is the record of what is intentionally off; there is no other. golangci-lint's
+version is pinned in CI (0005), so a linter added in a new release switches on in the pull
+request that upgrades it, where its findings are seen and either fixed, suppressed or argued
+into the disable list. As in 0005, a repo commits this file unchanged, and a change to it is a
+change to the org standard.
 
 #### Trial against `fetch-service`
 
-Before choosing, the candidate set was run against `fetch-service` at `373d1ce` (the
-`6-storage` branch, about twenty test files and seven internal packages):
+All 115 golangci-lint linters (v2.15.0, Go 1.27.4) were run against `fetch-service` at
+`373d1ce`, the `6-storage` branch: seven internal packages, four commands, nineteen test files.
+With the configuration above, 77 linters are on and they report **69 findings, 18 of them cleared
+by `golangci-lint run --fix`**:
 
-| Linter | Findings | Verdict |
+| Linter | Findings | What they are |
 |---|---:|---|
-| revive | 34 | 31 are `unused-parameter`, on `http.HandlerFunc`s and test handlers whose signatures are fixed. Rule disabled. The other 3 are real: two exported constants without doc comments, and a `time.Duration` named `RetryMin`. |
-| modernize | 13 | All real and all fixed by `golangci-lint run --fix`. |
-| bodyclose | 11 | All false positives. Every body is closed, but in a helper or by the type that takes ownership of the response — the normal shape in an HTTP fetcher, and one bodyclose can't follow. **Dropped.** |
-| noctx | 8 | Real: `net.Listen` and `http.NewRequest` without a context, mostly in tests. |
-| errorlint | 2 | Real: an `!=` comparison against a sentinel error in a test, and a deliberate `%v` that should either wrap or say why it doesn't. |
-| unparam | 2 | Real, both in tests. |
-| usestdlibvars | 2 | Real, fixed by `--fix`. |
-| gocritic | 1 | Real: a test slices from `strings.Index` without checking for −1. |
-| contextcheck | 1 | False positive: the server's shutdown deliberately starts from a fresh context after the serving one is cancelled. **Dropped.** |
+| modernize | 13 | Newer idioms (`slices.Backward`, `strings.Cut`, `errors.AsType`). All fixed by `--fix`. |
+| bodyclose | 11 | All false positives, from three places: 8 in `internal/bot/bot_test.go` at callers of one helper, 2 in `cmd/web-bot-auth-check/main.go` at callers of another, and 1 where `fetching`'s `call` takes ownership of the response. Both helpers close the body and then return the `*http.Response`, which bodyclose can't follow. Suppressed per line — or the helpers return what callers use (status, headers, body) instead of a response whose body is already closed, which clears ten and reads better. |
+| forcetypeassert | 8 | Unchecked type assertions in production code, five in `cmd/aep-openapi`. Each either becomes a checked assertion or is suppressed where the type is guaranteed. |
+| noctx | 8 | `net.Listen` and `http.NewRequest` without a context, mostly in tests. |
+| gochecknoglobals | 4 | Two lookup tables in production code, which are suppressed, and two test globals, which become locals or fixtures. |
+| embeddedstructfieldcheck | 3 | Embedded fields not first, or not set apart from the rest. |
+| errchkjson | 3 | `json.Marshal` errors discarded, one in `internal/signing/keys.go`. |
+| errname | 3 | Error types not named `…Error`. `fetching.Failure` may deserve a suppression; the other two are renames. |
+| revive | 3 | Two exported constants without doc comments, and a `time.Duration` named `RetryMin`. |
+| errorlint | 2 | A sentinel compared with `!=`, and a deliberate `%v` that should wrap or say why it doesn't. |
+| gosec | 2 | `cmd/aep-openapi` reads a file path it's given and writes its output `0644` — both intended for a code generator, both suppressed with that reason. |
+| unparam | 2 | Test helpers whose parameter always gets the same value. |
+| usestdlibvars | 2 | `"200"` for `http.StatusOK`. Fixed by `--fix`. |
+| containedctx | 1 | `fetching.call` holds its request's context — the accepted exception for a value that *is* one request. Suppressed. |
+| contextcheck | 1 | Shutdown starts from `context.Background()`; `context.WithoutCancel(ctx)` keeps the request's values and satisfies it. |
+| gocritic | 1 | A test slices from `strings.Index` without checking for −1. |
+| thelper | 1 | A test helper without `t.Helper()`. |
+| unconvert | 1 | A conversion to the type the value already has. |
 
-With `bodyclose`, `contextcheck` and `unused-parameter` gone, 31 findings remain, all
-genuine; `--fix` clears 17 of them, leaving 14 to fix by hand. None was a bug in production
-code. That is the right calibration: a set that is quiet when the code is good, so a finding is
-worth reading.
+The other 59 linters that are on found nothing. Some check for bugs this code doesn't have
+(`nilerr`, `durationcheck`, `makezero`); some check libraries it uses well (`sloglint`,
+`protogetter`); and some, such as `sqlclosecheck`, `testifylint` and `zerologlint`, are for
+libraries it doesn't use at all.
 
-### Review rubric
+For the record, the disabled linters would have reported: wsl 807, nlreturn 202, varnamelen 144,
+paralleltest 144, wsl_v5 126, exhaustruct 120, noinlineerr 120, depguard 67 (with no
+configuration, it rejects every non-standard import), wrapcheck 59, err113 48, lll 41,
+goconst 24, cyclop 20, mnd 20, testpackage 14, prealloc 9, and fewer than 5 each for the rest.
 
-`CONTRIBUTING.md` gains a **Code review** section: what a reviewer, human or automatic, checks
-beyond lint. It is short, cites the external guides rather than restating them, and grows by
-the existing rule that a point raised in review more than once gets folded into the house rules.
+### Style guide
 
-**Every language:**
+The org style guide lives in `docs/styleguide/`, the name the Google guides it builds on use, in
+files the automatic reviewer can be given whole, with nothing else:
 
-- The change does what its issue says, and no more ([AGENTS.md §10](../../AGENTS.md)).
+- `docs/styleguide/README.md` — what applies in every language, and how review works here.
+- `docs/styleguide/go.md` and `docs/styleguide/python.md` — one per language.
+
+`CONTRIBUTING.md` links to it from a short **Code review** section. Each file is short and
+cites the external guides rather than restating them. It grows by the existing rule that a point
+raised in review more than once gets written down — and shrinks when the calibration report shows
+a point has become a linter's job.
+
+**Every language** — readability only:
+
 - Names say what a thing is or does; a reader shouldn't need the implementation to follow a call.
-- Tests check behaviour, not implementation, and a bug fix comes with a test that would have
-  caught it.
-- Comments say why, not what; a TODO links an issue ([Code comments](../../CONTRIBUTING.md#code-comments)).
+- A function does one thing at one level of abstraction; deep nesting is flattened with early
+  returns.
+- Comments say why, not what; exported API is documented for its callers.
 - No speculative abstraction: an interface, option or layer earns its place with a second user.
-- Nothing CI already enforces is reported — lint, formatting, type errors, failing tests.
+- Tests read as specifications: each case says what it checks, and a failure message names the
+  input, what came back and what was wanted.
+- Nothing a linter or formatter enforces is reported.
 
-**Go** reviews apply the [Google Go Style Guide](https://google.github.io/styleguide/go/) — its
+**Go** applies the [Google Go Style Guide](https://google.github.io/styleguide/go/) — its
 Guide, Decisions and Best Practices, in that order of authority — and
 [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments). In particular:
 
 - **Package names and boundaries:** a package is one idea; names don't stutter
   (`storage.Store`, not `storage.StorageClient`); no `util` or `common`.
-- **Errors:** wrap with context where the caller gains from it; choose `%w` or `%v` deliberately,
-  since `%w` makes the wrapped error part of the API; handle an error once — don't log it and
-  also return it.
+- **Errors:** wrap with context where the caller gains from it; `%w` makes the wrapped error
+  part of the API, so choose it deliberately; handle an error once — don't log it and also
+  return it.
 - **Interfaces** belong to the consumer, stay small, and aren't declared before a second
   implementation or a test needs one.
-- **Context** is the first parameter and isn't stored in a struct.
 - **Goroutines** have an owner and a visible end: whoever starts one makes clear how it stops.
 - **Tests** are table-driven where cases vary only by data, report `got` before `want`, use
   `cmp.Diff` for structures, and use no assertion library.
 
-**Python** reviews apply the
-[Google Python Style Guide](https://google.github.io/styleguide/pyguide.html), except where
-ruff or `CONTRIBUTING.md` already decides.
+**Python** applies the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html),
+except where ruff or `CONTRIBUTING.md` already decides.
 
-### Automatic PR review
+### Automatic readability review
 
-A reusable workflow, `.github/workflows/reusable-claude-review.yml`, runs Anthropic's
-[`claude-code-action`](https://github.com/anthropics/claude-code-action) with the official
-`code-review` plugin and posts its findings as inline comments on the pull request.
+A reusable workflow, `.github/workflows/reusable-readability-review.yml`, runs Anthropic's
+[`claude-code-action`](https://github.com/anthropics/claude-code-action) with a prompt that
+does one job: review this pull request's diff for readability against the style guide, and post
+each finding as an inline comment.
 
-- **When:** when a pull request is opened or marked ready for review — once per pull request,
-  after the work is ready to read. Drafts are skipped; a later push doesn't start another.
-- **Against what:** the workflow also checks out `swimblocks/.github` and puts its
-  `CONTRIBUTING.md` and `AGENTS.md` where Claude Code reads user-level instructions
-  (`~/.claude/CLAUDE.md` on the runner). The review then sees the house rules and the rubric as
-  instructions, alongside the repo's own `CLAUDE.md`. There is one copy of the rubric, in this
-  repo; a change to it applies to every repo's next review with nothing to sync.
+- **When:** once per pull request, when it is opened or marked ready for review — after the
+  work is ready to read. Drafts are skipped. The workflow also runs on every later push, but
+  only to report that the review has happened: its first step asks the GitHub API whether the
+  Claude GitHub App has already reviewed this pull request, and if so the job succeeds without
+  reviewing again.
+- **What it's given:** the diff, and the style guide for the languages the diff touches —
+  `docs/styleguide/README.md` plus `go.md` for `.go` files, `python.md` for `.py` files —
+  checked out from this repo. It does not check out the repo under review, so it loads none of
+  that repo's `CLAUDE.md`, `AGENTS.md` or design docs. Where a name or an API can't be judged
+  from the diff alone, it reads the touched file, or its callers, through the GitHub API.
+- **What it's told:** readability only — not correctness, security or design. Nothing a linter
+  enforces. Each comment names the style-guide point it applies, in a fixed form the calibration
+  report can read, so the author can check the reasoning and the comment teaches as well as
+  corrects.
 - **Who posts:** the Claude GitHub App, so findings come from a bot rather than from anyone's
   account, and nobody has to approve each comment before it goes out.
 - **Which pull requests:** pull requests from a fork, and those opened by Dependabot, are
   skipped — GitHub withholds secrets from fork runs, and the action rejects bot actors.
-- **Cost and safety:** read-only repository permissions, a job timeout, and one review in
-  flight per pull request.
+- **Bounds:** read-only permissions, a job timeout, and one review in flight per pull request.
 - **Credential:** an org-level Actions secret. The workflow accepts either an API key
   (`ANTHROPIC_API_KEY`) or a token from `claude setup-token` (`CLAUDE_CODE_OAUTH_TOKEN`), so the
   credential can change without changing any repo.
 
-A repo opts in with its own thin caller, `.github/workflows/review.yml`, separate from
-`ci.yml` because it runs on different events:
+There is one copy of the style guide, here; a change to it applies to every repo's next review
+with nothing to sync.
+
+A repo opts in with its own thin caller, `.github/workflows/readability-review.yml`, separate
+from `ci.yml` because it runs on different events:
 
 ```yaml
-name: Review
+name: Readability review
 on:
   pull_request:
-    types: [opened, ready_for_review]
+    types: [opened, ready_for_review, synchronize, reopened]
 jobs:
   review:
-    uses: swimblocks/.github/.github/workflows/reusable-claude-review.yml@main
+    uses: swimblocks/.github/.github/workflows/reusable-readability-review.yml@main
     secrets: inherit
 ```
 
-The review is advisory. It is not a required status check, and it never approves or blocks.
+#### The review gates the merge
+
+Two rules together make the review blocking:
+
+- **The review must have run.** Its job is a required status check in the org ruleset
+  (`settings.yml`). That is why it runs on every push: a required check attaches to the pull
+  request's latest commit, so a check that ran only when the pull request opened would be
+  missing after the next push and the pull request could never merge. A job skipped for a fork
+  or Dependabot counts as passing, as GitHub treats skipped jobs. If the review itself fails —
+  the API is down, a usage limit is hit — the check fails and the run is re-run once it can
+  succeed; a pull request doesn't merge unreviewed by accident.
+- **Every finding must be answered.** The ruleset already requires all review threads to be
+  resolved, so each finding is either acted on or replied to and resolved.
+
+The reviewer never approves; whether the change is good is still the human's call.
+
+Requiring the check has an ordering constraint: the ruleset applies to every repo at once, so
+every repo must have its `readability-review.yml` caller before the rollout that requires it,
+or pull requests in the repos without one block forever.
 
 #### What the record does and doesn't guarantee
 
-The comments stay on the pull request after merge, which is the record. The ruleset's
-"all threads resolved" rule would make every finding get an answer before merge, but the
+The comments stay on the pull request after merge, which is the record. While the
 [solo-admin merge path](../../CONTRIBUTING.md#solo-admin-merge-path) merges with an admin
-bypass, which skips that rule too. Until a second code owner exists, answering each finding is
-a habit rather than a gate: reply to say what changed, or why not, and resolve the thread.
+bypass, the bypass skips both rules above along with the approval it exists to skip. Until that
+changes, the gate holds only if the bypass is used for the missing approval and nothing else:
+merge once the review check is green and every thread is resolved.
 
 #### Considered: Anthropic's managed Code Review
 
-Anthropic also runs Code Review as a hosted service: no workflow file, several reviewing agents
-with a verification step, and a check run on each pull request. It reads review instructions
-from each repo's own `REVIEW.md` and `CLAUDE.md`, and can include other files only from that
-same repo's root. An org rubric kept here would have to be copied into every repo and kept in
-step, which is the drift the reconciler ([0003](0003-settings-releases-and-rollout.md)) exists
-to prevent for settings. The workflow route keeps one copy. Revisit if the hosted service gains
-a way to read shared, org-level instructions.
+Anthropic also runs Code Review as a hosted service, with no workflow file. It reviews for
+correctness by default and reads its instructions from each repo's own `REVIEW.md` and
+`CLAUDE.md`, including other files only from that same repo's root. A style guide kept here
+would have to be copied into every repo and kept in step, which is the drift the reconciler
+([0003](0003-settings-releases-and-rollout.md)) exists to prevent for settings. The workflow
+route keeps one copy and a focused prompt. Revisit if the hosted service gains a way to read
+shared, org-level instructions.
+
+### Calibration report
+
+The lint set and the style guide are starting points, not verdicts. A weekly workflow in this
+repo, `.github/workflows/review-calibration.yml`, tunes them from what the org's repos and pull
+requests already record:
+
+- **Lint suppressions.** Every `//nolint:` directive across the org's Go repos, with its linter,
+  location and reason. A linter suppressed five or more times is flagged: it is either
+  misconfigured for how we write Go, or wrong for us, and the reasons say which.
+- **Disabled linters.** Each linter in the disable list is run against every Go repo and its
+  findings counted. One whose findings are few and look real is flagged as a candidate to
+  switch on, with a sample.
+- **Readability findings.** Every finding the readability reviewer posted on a pull request
+  merged that week, by the style-guide point it cited, and whether it was **accepted** — the
+  lines it commented on changed before merge — or **rejected**, merged unchanged. A point that
+  is mostly rejected is flagged for rewording or removal. A point that is mostly accepted and
+  mechanical is flagged as a candidate for a linter: switching one on, enabling a `revive` or
+  `gocritic` rule, or writing the configuration for one of the linters that needs it — a
+  recurring "don't import X" is what `depguard` is for. That is how the org finds out it has a
+  use for those.
+
+**One issue per observation.** Each flag above becomes its own issue in this repo, opened the
+first week it appears — "bodyclose suppressed 11 times", "go.md *Errors* rejected 4 of 5
+times" — with the evidence, labelled `calibration`. Each carries a stable key in a hidden
+marker (`lint:bodyclose:suppressed`, `style:go/errors:rejected`), so in later weeks the
+workflow finds its own issue instead of opening another. When there is something new — new
+suppressions or rejections, with their reasons — it adds a comment saying what changed, and
+rewrites the body so it stays a short statement of the case as it now stands: the observation,
+the current numbers, the suggested change. History lives in the comments; the body stays
+succinct. A week with nothing new touches nothing. Closing the issue is the decision — acting
+on it, or deciding not to — and a closed key is never reopened by the workflow; if the case
+grows much stronger, it says so on the closed issue once. The full weekly numbers, flagged or not, go in the workflow run's summary, not in
+an issue.
+
+The workflow posts as itself, so the issues read as the bot's, not anyone's. It suggests;
+it changes nothing. Acting on a suggestion is an ordinary pull request against this design's
+`.golangci.yml` or the style guide, linking the issue. The workflow reads private repos with the reconciler's GitHub App
+([0001](0001-github-app-reconciler.md)), and its logic lives in a tested script under
+`scripts/`, like the reconciler's.
 
 ### In the agent work loop
 
 An agent still hands work to the author before any pull request exists (AGENTS.md §3). Before
 handing off, it runs `/code-review` on its own diff and fixes what it finds, so the author
-isn't reading problems the bot will raise minutes after the pull request opens. That local
-review leaves no record; it is a courtesy to the author, not the review of record. Once the
-pull request is open, answering the bot's findings is part of the author's review, and an
-agent asked to address them replies in the thread with what changed.
+isn't reading problems minutes before a reviewer raises them. That local review leaves no
+record; it is a courtesy to the author, not the review of record. Once the pull request is open,
+answering the readability findings is part of the author's review, and an agent asked to address
+them replies in the thread with what changed.
 
 ## Rollout
 
 - **Depends on 0005's rollout ([#63](https://github.com/swimblocks/.github/issues/63)):** the
-  Go section of `CONTRIBUTING.md` it creates carries this lint set, not the `standard`-only one.
-- `CONTRIBUTING.md`: the **Code review** section above.
+  Go section of `CONTRIBUTING.md` it creates carries this lint set and the suppression rule, not
+  the `standard`-only set.
+- `docs/styleguide/`, and the **Code review** section in `CONTRIBUTING.md` linking it.
 - `AGENTS.md` §3: the pre-handoff `/code-review`, and answering review findings.
-- `.github/workflows/reusable-claude-review.yml`.
+- `.github/workflows/reusable-readability-review.yml`.
+- `.github/workflows/review-calibration.yml` and its script, with tests.
 - Org setup, done once by an org owner: install the
   [Claude GitHub App](https://github.com/apps/claude) on all repositories, and add the
   credential as an org Actions secret.
-- `scripts/create-repo.sh` prints the `review.yml` caller next to the CI caller.
-- **`fetch-service` goes first**, under its own issue: commit the new `.golangci.yml`, fix the
-  31 findings, add `review.yml`.
+- `scripts/create-repo.sh` prints the `readability-review.yml` caller next to the CI caller.
+- Every repo gets its `readability-review.yml` caller; only then does `settings.yml`'s ruleset
+  require the review check, in a later settings release.
+- **`fetch-service` goes first**, under its own issue: commit the new `.golangci.yml`, fix or
+  suppress the 69 findings, add `readability-review.yml`.
 
 ## Verification
 
-- **Done:** the lint trial above, with golangci-lint 2.15.0 on Go 1.27.4; the final set passes
-  `golangci-lint config verify`.
-- **Pending, with the workflow:** `actionlint` passes on `reusable-claude-review.yml`. On
-  `fetch-service`'s next pull request, the review runs and posts inline comments as the Claude
-  GitHub App, and a deliberately planted rubric violation — a stuttering name, say — is reported,
-  which shows the rubric reached the review. If it isn't, the workflow passes the rubric with
-  `--append-system-prompt` instead.
+- **Done:** the lint trial above. The configuration passes `golangci-lint config verify`, and
+  the `contextcheck` fix and the `exhaustive` setting were each checked by re-running with them
+  applied.
+- **Pending, with the workflows:** `actionlint` passes on both. On `fetch-service`'s next pull
+  request, the review posts inline comments as the Claude GitHub App, each citing a style-guide
+  point; a deliberately planted violation — a stuttering name, say — is reported; and nothing is
+  posted about correctness or about what lint enforces. A later push to that pull request
+  passes the check without a second review. The first calibration report lists
+  `fetch-service`'s suppressions, and the disabled linters' counts above.
 
 ## Open items
 
+- **CI isn't a required check either.** The org ruleset requires no status checks today, so a
+  red CI run doesn't block a merge any more than a missing review would. Requiring CI belongs
+  with the review check, in the same ruleset change, but is its own decision.
 - **Re-review after changes.** A pull request is reviewed once. If substantial rework needs a
   second look, a comment trigger (`@claude review`) may be worth adding; not until it's missed.
 - **The Claude GitHub App's permissions** are broader than the review needs, because one app
   serves all of Claude's GitHub features. A custom app limited to contents, issues and pull
-  requests would narrow that, at the cost of creating and maintaining one. Revisit if the app is
-  ever used for anything beyond review.
+  requests would narrow that, at the cost of creating and maintaining one.
+- **Accepted versus rejected** is judged from whether the commented lines changed, which misses
+  a finding fixed elsewhere and counts an unrelated edit as acceptance. Reading the thread's
+  replies, perhaps with Claude, would sharpen it; as would grouping similar suppression reasons.
+  Worth adding once there's enough data to be wrong about.

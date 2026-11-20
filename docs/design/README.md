@@ -17,4 +17,4 @@ sequential, never reused.
 | [0004](0004-uv-standard.md) | uv as the org Python toolchain | proposed |
 | [0005](0005-go-standard.md) | Go as an org language | proposed |
 | [0006](0006-aep-apis.md) | APIs follow the AEPs | proposed |
-| [0007](0007-review-standard.md) | Automatic code review and a stricter Go lint set | proposed |
+| [0007](0007-review-standard.md) | Automatic readability review and a stricter Go lint set | proposed |
