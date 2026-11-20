@@ -256,8 +256,8 @@ on:
     types: [opened, ready_for_review, synchronize, reopened]
 permissions:
   contents: read
-  pull-requests: read
-  id-token: write      # exchanged for the Claude GitHub App's token
+  pull-requests: write   # the summary comment
+  id-token: write        # signing in to Google Cloud and to the Claude GitHub App
 jobs:
   review:
     uses: swimblocks/.github/.github/workflows/reusable-readability-review.yml@main
@@ -268,9 +268,9 @@ A pull request is reviewed once, when it is opened or marked ready for review, a
 guide for the languages it changes. Findings are inline comments from the Claude GitHub App, and
 the review ends with a summary comment saying how many it posted. It runs again on each push
 only to confirm the review has happened. Drafts, fork pull requests and pull requests from bots
-are skipped. It needs the Claude GitHub App on the repo and a `CLAUDE_CODE_OAUTH_TOKEN` or
-`ANTHROPIC_API_KEY` secret: the org-level one reaches public repos, but on GitHub Free a private
-repo needs its own copy.
+are skipped. It needs only the Claude GitHub App on the repo: the model token is read from
+Google Cloud over OIDC, and the two secrets that say where to find it are copied into every repo
+by the settings rollout ([`docs/reconciler.md`](docs/reconciler.md)).
 
 Answer every finding: change the code, or reply saying why not, then resolve the thread.
 A finding you reject is as useful as one you accept: the planned calibration report

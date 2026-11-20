@@ -228,25 +228,34 @@ each finding as an inline comment.
   checked out from this repo. The pull request's code is checked out too, so a name or an API
   can be judged in its file and its callers, but with its `CLAUDE.md`, `AGENTS.md` and
   `.claude/` removed: the review gets the style guide and the change, not the repo's own context.
-  Reading files locally needs no GitHub API access beyond posting, which keeps Claude's tools to
-  reading files and posting comments.
+  Claude gets no shell: its tools are reading files, writing its summary to a file, and posting
+  inline comments. A shell command could expand the environment, which holds the model token,
+  into a comment that text planted in the pull request asked for.
 - **What it's told:** readability only — not correctness, security or design. Nothing a linter
   enforces. Each comment names the style-guide point it applies, in a fixed form the calibration
   report can read, so the author can check the reasoning and the comment teaches as well as
   corrects.
-- **Who posts:** the Claude GitHub App, so findings come from a bot rather than from anyone's
-  account, and nobody has to approve each comment before it goes out.
+- **Who posts:** the Claude GitHub App posts the findings, and the workflow posts Claude's
+  summary as `github-actions[bot]`; both are bots rather than anyone's account, so nobody has
+  to approve each comment before it goes out.
 - **Which pull requests:** pull requests from a fork, and those opened by Dependabot, are
   skipped — GitHub withholds secrets from fork runs, and the action rejects bot actors.
-- **Bounds:** the workflow's own token reads and nothing more — `contents: read` and
-  `pull-requests: read` — plus `id-token: write`, which the action needs to exchange for the
-  Claude GitHub App's token; the comments are posted with that App token. A job timeout, and one
-  review in flight per pull request.
-- **Credential:** an Actions secret, either an API key (`ANTHROPIC_API_KEY`) or a token from
-  `claude setup-token` (`CLAUDE_CODE_OAUTH_TOKEN`); the workflow accepts either, so the
-  credential can change without changing any repo. Public repos share one org-level secret.
-  GitHub Free doesn't give private repos access to org-level secrets, so each private repo
-  holds its own copy.
+- **Bounds:** the workflow's own token reads the code and posts the summary —
+  `contents: read`, `pull-requests: write` — and `id-token: write` signs in to Google Cloud and
+  to the Claude GitHub App, whose token posts the findings. A job timeout, and one review in
+  flight per pull request.
+- **Credential:** the model token, from `claude setup-token`, lives in Secret Manager in an
+  org CI project in Google Cloud, `swimblocks-ci`, whose Terraform is in
+  `swimblocks/.github-private`. The workflow signs in over OIDC and reads it, and the identity
+  provider admits only this workflow, from this repo's `main`, running in a swimblocks repo: no
+  other workflow, in any repo or on any branch, can read the token. The workflow deletes the
+  Google credentials file before the review starts.
+- **Where to sign in:** the provider's and the secret's resource paths are identifiers, not
+  credentials, but they stay out of this public workflow, where they'd point at what to probe.
+  They are repo secrets, masked in logs. GitHub Free doesn't give private repos the org's
+  secrets, so the settings rollout copies them into every repo from `swimblocks/.github`'s own
+  ([`docs/reconciler.md`](../reconciler.md)) — the reconciler's existing reach, rather than a
+  copy kept by hand per repo.
 
 There is one copy of the style guide, here; a change to it applies to every repo's next review
 with nothing to sync.
@@ -262,8 +271,8 @@ on:
     types: [opened, ready_for_review, synchronize, reopened]
 permissions:
   contents: read
-  pull-requests: read
-  id-token: write      # exchanged for the Claude GitHub App's token
+  pull-requests: write   # the summary comment
+  id-token: write        # signing in to Google Cloud and to the Claude GitHub App
 jobs:
   review:
     uses: swimblocks/.github/.github/workflows/reusable-readability-review.yml@main
@@ -374,10 +383,15 @@ them replies in the thread with what changed.
 - `.github/workflows/reusable-readability-review.yml`.
 - The calibration script under `scripts/`, with tests; and `swimblocks/.github-private`,
   created with `scripts/create-repo.sh`, holding the weekly workflow that runs it.
+- `swimblocks/.github-private` with the `swimblocks-ci` project's Terraform: the workload
+  identity pool and the token's secret. The operator applies it and adds the token.
+- `settings.yml`'s `actions_secrets`, `apply_settings.py` copying them, and the reconciler App's
+  Secrets permission.
 - Org setup, done once by an org owner: install the
-  [Claude GitHub App](https://github.com/apps/claude) on all repositories, and add the
-  credential as an org Actions secret; create the `swimblocks-calibrator` App, install it on
-  all repositories, and add its credentials as secrets of the calibration workflow.
+  [Claude GitHub App](https://github.com/apps/claude) on all repositories; approve the
+  reconciler's new permission; put the two Google Cloud identifiers on `swimblocks/.github` as
+  secrets; create the `swimblocks-calibrator` App, install it on all repositories, and add its
+  credentials as secrets of the calibration workflow.
 - `scripts/create-repo.sh` prints the `readability-review.yml` caller next to the CI caller.
 - Every repo gets its `readability-review.yml` caller; only then does `settings.yml`'s ruleset
   require the review check, in a later settings release.
@@ -398,12 +412,13 @@ them replies in the thread with what changed.
 
 ## Open items
 
-- **The model credential is a long-lived token in a secret**, the kind of credential
-  [0001](0001-github-app-reconciler.md) replaced with GitHub Apps for GitHub access — and on
-  GitHub Free, one copy per private repo. Workload identity federation removes it: the action
-  exchanges the workflow's OIDC token for short-lived access through a Claude Console service
-  account, with nothing stored. Switch to it once the review has shown its worth; only the
-  workflow's authentication inputs change.
+- **The model credential is still a long-lived token**, the kind of credential
+  [0001](0001-github-app-reconciler.md) replaced with GitHub Apps for GitHub access. Keeping it
+  in Secret Manager behind OIDC means one copy, readable by one workflow, but it is still
+  rotated by hand and tied to the person who made it. Federated model access removes it — Claude
+  through Vertex AI in the same `swimblocks-ci` project, or a Claude Console service account —
+  at a per-token cost. Switch once the review has shown its worth; only the workflow's sign-in
+  steps change.
 - **CI isn't a required check either.** The org ruleset requires no status checks today, so a
   red CI run doesn't block a merge any more than a missing review would. Requiring CI belongs
   with the review check, in the same ruleset change, but is its own decision.

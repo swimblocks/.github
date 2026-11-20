@@ -47,7 +47,7 @@ grant belongs on the other's installation:
 
 | App | Used by | Installed on | Permissions | Secrets |
 |---|---|---|---|---|
-| `swimblocks-reconciler` | `rollout.yml` | **All repositories** in the org | Metadata read; Administration read & write; Issues read & write; Custom properties read & write | `APP_ID`, `APP_PRIVATE_KEY` |
+| `swimblocks-reconciler` | `rollout.yml` | **All repositories** in the org | Metadata read; Administration read & write; Issues read & write; Custom properties read & write; Secrets read & write | `APP_ID`, `APP_PRIVATE_KEY` |
 | `swimblocks-releaser` | `release.yml` | **`swimblocks/.github` only** | Metadata read; Contents read & write | `RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY` |
 
 The reconciler's permissions are what the script's API calls require, one to one:
@@ -58,6 +58,7 @@ The reconciler's permissions are what the script's API calls require, one to one
 | Administration read & write | `PATCH /repos/{repo}`, branch protection, rulesets | merge methods, protection, rulesets |
 | Issues read & write | `POST /repos/{repo}/labels` | creating any label `settings.yml` lists and the repo lacks |
 | Custom properties read & write | `PATCH /repos/{repo}/properties/values` | recording `settings_version` |
+| Secrets read & write | `PUT /repos/{repo}/actions/secrets/{name}`, and listing them | copying `settings.yml`'s `actions_secrets` into every repo, since GitHub Free gives private repos no org secrets (design 0007) |
 
 That last one is the whole of what the repository-level Custom properties permission grants — one
 endpoint, no read of anything else. The org-level equivalent, `PATCH /orgs/{org}/properties/values`,
@@ -77,6 +78,23 @@ credential that only needs to change settings. The releaser is installed on `.gi
 where `main` is already gated by CODEOWNERS review.
 
 All four secrets live on `swimblocks/.github` under Settings → Secrets and variables → Actions.
+
+**Secrets the rollout copies.** GitHub Free doesn't give private repos the org's Actions secrets,
+so the reconciler copies the ones `settings.yml` lists under `actions_secrets` into every repo.
+Each value is the secret of the same name on `swimblocks/.github`, which `rollout.yml` passes in;
+to change one, change it there and run the rollout. A secret can't be read back, so each rollout
+rewrites it rather than comparing it, and checks only that it exists. Today the list is the
+readability review's two Google Cloud identifiers (design 0007), which come from
+`terraform output` in `swimblocks/.github-private`'s `terraform/ci`:
+
+| Secret | Value |
+|---|---|
+| `SWIMBLOCKS_CI_WIF_PROVIDER` | `terraform output -raw workload_identity_provider` |
+| `SWIMBLOCKS_CI_REVIEW_SECRET` | `terraform output -raw readability_review_secret` |
+
+The reconciler's Secrets permission was added for this. An org owner approves the new
+permission on the app's installation before the first rollout that needs it; until then, that
+rollout fails each repo at `secret ... set failed (HTTP 403)`.
 
 **`APP_ID` / `RELEASE_APP_ID` hold the app's Client ID** (`Iv23li…`), not the numeric App ID.
 GitHub recommends the Client ID for minting installation tokens and shows it beside the App ID on
@@ -100,6 +118,7 @@ Perform once (or when recreating the app from scratch). Requires org-owner acces
    - **Repository permissions → Administration:** Read & write
    - **Repository permissions → Issues:** Read & write
    - **Repository permissions → Custom properties:** Read & write
+   - **Repository permissions → Secrets:** Read & write
    - All other permissions: No access
 3. **Create GitHub App.** Note the **Client ID** on the next page (the numeric **App ID** beside
    it also works — see Authentication above).
