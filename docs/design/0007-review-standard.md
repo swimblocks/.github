@@ -244,9 +244,9 @@ each finding as an inline comment.
   `contents: read`, `pull-requests: write` — and `id-token: write` signs in to Google Cloud and
   to the Claude GitHub App, whose token posts the findings. A job timeout, and one review in
   flight per pull request.
-- **Credential:** the model token, from `claude setup-token`, lives in Secret Manager in an
-  org CI project in Google Cloud, `swimblocks-ci`, whose Terraform is in
-  `swimblocks/.github-private`. The workflow signs in over OIDC and reads it, and the identity
+- **Credential:** the model token, from `claude setup-token`, lives in Secret Manager in the
+  org's devops project in Google Cloud, beside the shared Terraform state; its Terraform is
+  in `swimblocks/.github-private`. The workflow signs in over OIDC and reads it, and the identity
   provider admits only this workflow, from this repo's `main`, running in a swimblocks repo: no
   other workflow, in any repo or on any branch, can read the token. The workflow deletes the
   Google credentials file before the review starts.
@@ -383,7 +383,7 @@ them replies in the thread with what changed.
 - `.github/workflows/reusable-readability-review.yml`.
 - The calibration script under `scripts/`, with tests; and `swimblocks/.github-private`,
   created with `scripts/create-repo.sh`, holding the weekly workflow that runs it.
-- `swimblocks/.github-private` with the `swimblocks-ci` project's Terraform: the workload
+- `swimblocks/.github-private` with the devops project's Terraform: the workload
   identity pool and the token's secret. The operator applies it and adds the token.
 - `settings.yml`'s `actions_secrets`, `apply_settings.py` copying them, and the reconciler App's
   Secrets permission.
@@ -416,7 +416,7 @@ them replies in the thread with what changed.
   [0001](0001-github-app-reconciler.md) replaced with GitHub Apps for GitHub access. Keeping it
   in Secret Manager behind OIDC means one copy, readable by one workflow, but it is still
   rotated by hand and tied to the person who made it. Federated model access removes it — Claude
-  through Vertex AI in the same `swimblocks-ci` project, or a Claude Console service account —
+  through Vertex AI in the same devops project, or a Claude Console service account —
   at a per-token cost. Switch once the review has shown its worth; only the workflow's sign-in
   steps change.
 - **CI isn't a required check either.** The org ruleset requires no status checks today, so a

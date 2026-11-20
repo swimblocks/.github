@@ -38,7 +38,7 @@ labels:
 # name on swimblocks/.github, which rollout.yml passes in. Names only here, never values.
 # A secret's value can't be read back, so each rollout rewrites it rather than checking it.
 actions_secrets:
-  # The readability review's sign-in to the swimblocks-ci Google Cloud project, and the
+  # The readability review's sign-in to the org's devops Google Cloud project, and the
   # Secret Manager secret it reads there (design 0007). Identifiers rather than credentials,
   # kept out of the public workflow file and masked in logs.
   - name: SWIMBLOCKS_CI_WIF_PROVIDER

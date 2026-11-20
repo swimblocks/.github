@@ -85,7 +85,7 @@ Each value is the secret of the same name on `swimblocks/.github`, which `rollou
 to change one, change it there and run the rollout. A secret can't be read back, so each rollout
 rewrites it rather than comparing it, and checks only that it exists. Today the list is the
 readability review's two Google Cloud identifiers (design 0007), which come from
-`terraform output` in `swimblocks/.github-private`'s `terraform/ci`:
+`terraform output` in `swimblocks/.github-private`'s `terraform/devops`:
 
 | Secret | Value |
 |---|---|
