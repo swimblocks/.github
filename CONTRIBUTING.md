@@ -226,6 +226,27 @@ Install golangci-lint at the version [`reusable-go-ci.yml`](.github/workflows/re
 pins, so local results match CI's. Rationale, project layout and naming are in
 [`docs/design/0005-go-standard.md`](docs/design/0005-go-standard.md).
 
+A Go repo's `.devcontainer/devcontainer.json` uses the official Go feature, which installs
+golangci-lint too:
+
+```json
+{
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "latest",
+      "golangciLintVersion": "2.15.0"
+    }
+  }
+}
+```
+
+- `"version": "latest"` is the current stable release. When a repo's `go.mod` names a newer
+  Go, the toolchain fetches it, so the version still lives only in `go.mod`.
+- `golangciLintVersion` is the version `reusable-go-ci.yml` pins, written without the `v`.
+  Change the two together. The feature installs golangci-lint only while its
+  `installGoTools` option is on, as it is by default.
+
 ## Secrets & data
 
 - Never commit secrets (`.env`, credentials, service-account keys) — they're gitignored.

@@ -131,8 +131,9 @@ Go repos use the `gomod` ecosystem alongside `github-actions`, and `docker` wher
 ### Devcontainers
 
 The devcontainer for a Go repo uses the official Go feature and installs golangci-lint at the
-CI's pinned version. The first Go repo lands the concrete snippet, which is then folded back
-into [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+CI's pinned version. The concrete snippet lives in [`CONTRIBUTING.md`](../../CONTRIBUTING.md),
+and Go repos adopt it from there, as they adopt the reusable CI. The standard leads and repos
+follow; it does not wait for a repo to write the snippet first.
 
 ## Rollout
 
@@ -147,11 +148,12 @@ into [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
 ## Verification
 
-- **Pending, with the workflow under #63:** `actionlint` passes on `reusable-go-ci.yml`, and
-  the workflow runs green on a real runner, first with `fetch-service`'s first PR.
+- **Done:** `actionlint` (v1.7.7) passes on `reusable-go-ci.yml`
+  ([#69](https://github.com/swimblocks/.github/pull/69)).
+- **Pending:** the workflow runs green on a real runner, the first time `fetch-service`'s
+  `ci.yml` calls it.
 
 ## Open items
 
-- The devcontainer snippet, as above.
 - Whether a shared Go library repo is ever wanted (for example, a client for `fetch-service`).
   Not until a second Go repo needs one.
