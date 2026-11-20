@@ -133,27 +133,27 @@ change to the org standard.
 
 #### Trial against `fetch-service`
 
-All 115 golangci-lint linters (v2.15.0, Go 1.27.4) were run against `fetch-service` at
-`373d1ce`, the `6-storage` branch: seven internal packages, four commands, nineteen test files.
+All 115 golangci-lint linters (v2.15.0, Go 1.27.4) were run against `fetch-service`, the
+org's first Go repo: an HTTP service with a handful of internal packages and command-line tools.
 With the configuration above, 77 linters are on and they report **69 findings, 18 of them cleared
 by `golangci-lint run --fix`**:
 
 | Linter | Findings | What they are |
 |---|---:|---|
 | modernize | 13 | Newer idioms (`slices.Backward`, `strings.Cut`, `errors.AsType`). All fixed by `--fix`. |
-| bodyclose | 11 | All false positives, from three places: 8 in `internal/bot/bot_test.go` at callers of one helper, 2 in `cmd/web-bot-auth-check/main.go` at callers of another, and 1 where `fetching`'s `call` takes ownership of the response. Both helpers close the body and then return the `*http.Response`, which bodyclose can't follow. Suppressed per line — or the helpers return what callers use (status, headers, body) instead of a response whose body is already closed, which clears ten and reads better. |
-| forcetypeassert | 8 | Unchecked type assertions in production code, five in `cmd/aep-openapi`. Each either becomes a checked assertion or is suppressed where the type is guaranteed. |
+| bodyclose | 11 | All false positives, from three places: 8 at callers of one test helper, 2 at callers of a helper in a command-line tool, and 1 where a type takes ownership of the response. Both helpers close the body and then return the `*http.Response`, which bodyclose can't follow. Suppressed per line — or the helpers return what callers use (status, headers, body) instead of a response whose body is already closed, which clears ten and reads better. |
+| forcetypeassert | 8 | Unchecked type assertions in production code, five of them in one code generator. Each either becomes a checked assertion or is suppressed where the type is guaranteed. |
 | noctx | 8 | `net.Listen` and `http.NewRequest` without a context, mostly in tests. |
 | gochecknoglobals | 4 | Two lookup tables in production code, which are suppressed, and two test globals, which become locals or fixtures. |
 | embeddedstructfieldcheck | 3 | Embedded fields not first, or not set apart from the rest. |
-| errchkjson | 3 | `json.Marshal` errors discarded, one in `internal/signing/keys.go`. |
-| errname | 3 | Error types not named `…Error`. `fetching.Failure` may deserve a suppression; the other two are renames. |
-| revive | 3 | Two exported constants without doc comments, and a `time.Duration` named `RetryMin`. |
+| errchkjson | 3 | `json.Marshal` errors discarded, one in production code. |
+| errname | 3 | Error types not named `…Error`. One exported type may deserve a suppression; the other two are renames. |
+| revive | 3 | Two exported constants without doc comments, and a `time.Duration` whose name ends in a unit. |
 | errorlint | 2 | A sentinel compared with `!=`, and a deliberate `%v` that should wrap or say why it doesn't. |
-| gosec | 2 | `cmd/aep-openapi` reads a file path it's given and writes its output `0644` — both intended for a code generator, both suppressed with that reason. |
+| gosec | 2 | A code generator reads a file path it's given and writes its output `0644` — both intended for a code generator, both suppressed with that reason. |
 | unparam | 2 | Test helpers whose parameter always gets the same value. |
 | usestdlibvars | 2 | `"200"` for `http.StatusOK`. Fixed by `--fix`. |
-| containedctx | 1 | `fetching.call` holds its request's context — the accepted exception for a value that *is* one request. Suppressed. |
+| containedctx | 1 | A type holds its request's context — the accepted exception for a value that *is* one request. Suppressed. |
 | contextcheck | 1 | Shutdown starts from `context.Background()`; `context.WithoutCancel(ctx)` keeps the request's values and satisfies it. |
 | gocritic | 1 | A test slices from `strings.Index` without checking for −1. |
 | thelper | 1 | A test helper without `t.Helper()`. |
@@ -236,7 +236,10 @@ each finding as an inline comment.
   account, and nobody has to approve each comment before it goes out.
 - **Which pull requests:** pull requests from a fork, and those opened by Dependabot, are
   skipped — GitHub withholds secrets from fork runs, and the action rejects bot actors.
-- **Bounds:** read-only permissions, a job timeout, and one review in flight per pull request.
+- **Bounds:** the workflow's own token reads and nothing more — `contents: read` and
+  `pull-requests: read` — plus `id-token: write`, which the action needs to exchange for the
+  Claude GitHub App's token; the comments are posted with that App token. A job timeout, and one
+  review in flight per pull request.
 - **Credential:** an org-level Actions secret. The workflow accepts either an API key
   (`ANTHROPIC_API_KEY`) or a token from `claude setup-token` (`CLAUDE_CODE_OAUTH_TOKEN`), so the
   credential can change without changing any repo.
@@ -245,13 +248,18 @@ There is one copy of the style guide, here; a change to it applies to every repo
 with nothing to sync.
 
 A repo opts in with its own thin caller, `.github/workflows/readability-review.yml`, separate
-from `ci.yml` because it runs on different events:
+from `ci.yml` because it runs on different events. A reusable workflow can't hold more
+permissions than its caller grants, so the caller grants exactly what the review needs:
 
 ```yaml
 name: Readability review
 on:
   pull_request:
     types: [opened, ready_for_review, synchronize, reopened]
+permissions:
+  contents: read
+  pull-requests: read
+  id-token: write      # exchanged for the Claude GitHub App's token
 jobs:
   review:
     uses: swimblocks/.github/.github/workflows/reusable-readability-review.yml@main
@@ -278,14 +286,6 @@ Requiring the check has an ordering constraint: the ruleset applies to every rep
 every repo must have its `readability-review.yml` caller before the rollout that requires it,
 or pull requests in the repos without one block forever.
 
-#### What the record does and doesn't guarantee
-
-The comments stay on the pull request after merge, which is the record. While the
-[solo-admin merge path](../../CONTRIBUTING.md#solo-admin-merge-path) merges with an admin
-bypass, the bypass skips both rules above along with the approval it exists to skip. Until that
-changes, the gate holds only if the bypass is used for the missing approval and nothing else:
-merge once the review check is green and every thread is resolved.
-
 #### Considered: Anthropic's managed Code Review
 
 Anthropic also runs Code Review as a hosted service, with no workflow file. It reviews for
@@ -298,8 +298,8 @@ shared, org-level instructions.
 
 ### Calibration report
 
-The lint set and the style guide are starting points, not verdicts. A weekly workflow in this
-repo, `.github/workflows/review-calibration.yml`, tunes them from what the org's repos and pull
+The lint set and the style guide are starting points, not verdicts. A weekly workflow tunes
+them from what the org's repos and pull
 requests already record:
 
 - **Lint suppressions.** Every `//nolint:` directive across the org's Go repos, with its linter,
@@ -317,7 +317,7 @@ requests already record:
   recurring "don't import X" is what `depguard` is for. That is how the org finds out it has a
   use for those.
 
-**One issue per observation.** Each flag above becomes its own issue in this repo, opened the
+**One issue per observation.** Each flag above becomes its own issue, opened the
 first week it appears — "bodyclose suppressed 11 times", "go.md *Errors* rejected 4 of 5
 times" — with the evidence, labelled `calibration`. Each carries a stable key in a hidden
 marker (`lint:bodyclose:suppressed`, `style:go/errors:rejected`), so in later weeks the
@@ -327,14 +327,29 @@ rewrites the body so it stays a short statement of the case as it now stands: th
 the current numbers, the suggested change. History lives in the comments; the body stays
 succinct. A week with nothing new touches nothing. Closing the issue is the decision — acting
 on it, or deciding not to — and a closed key is never reopened by the workflow; if the case
-grows much stronger, it says so on the closed issue once. The full weekly numbers, flagged or not, go in the workflow run's summary, not in
-an issue.
+grows much stronger, it says so on the closed issue once. The full weekly numbers, flagged or
+not, go in the workflow run's summary, not in an issue.
 
 The workflow posts as itself, so the issues read as the bot's, not anyone's. It suggests;
 it changes nothing. Acting on a suggestion is an ordinary pull request against this design's
-`.golangci.yml` or the style guide, linking the issue. The workflow reads private repos with the reconciler's GitHub App
-([0001](0001-github-app-reconciler.md)), and its logic lives in a tested script under
-`scripts/`, like the reconciler's.
+`.golangci.yml` or the style guide, linking the issue.
+
+**It runs in private.** The report quotes what it finds — suppression reasons, file paths, code
+samples — and most of the org's repos, `fetch-service` among them, are private, while this repo
+is public. So the workflow, and the issues, logs and run summaries it produces, live in
+`swimblocks/.github-private`: the private counterpart of this repo, named by the GitHub
+convention that already makes its `profile/README.md` the org profile only members see. It
+becomes the home for org-level work that can't be public, so each new need doesn't bring a new
+special-purpose repo. The calibration logic itself stays here, as a tested script under
+`scripts/` like the reconciler's, which the private workflow checks out each run: the code is
+public, the data isn't.
+
+It reads the org's repos through a GitHub App of its own, `swimblocks-calibrator`, installed on
+all repositories with Metadata, Contents and Pull requests read, and Issues write — which it
+uses only in `.github-private`. Neither existing app fits:
+the reconciler can't read code or pull requests, and [`docs/reconciler.md`](../reconciler.md)
+keeps each app to the permissions its one job needs, so the calibrator's grant goes on an
+installation of its own rather than widening the reconciler's.
 
 ### In the agent work loop
 
@@ -353,10 +368,12 @@ them replies in the thread with what changed.
 - `docs/styleguide/`, and the **Code review** section in `CONTRIBUTING.md` linking it.
 - `AGENTS.md` §3: the pre-handoff `/code-review`, and answering review findings.
 - `.github/workflows/reusable-readability-review.yml`.
-- `.github/workflows/review-calibration.yml` and its script, with tests.
+- The calibration script under `scripts/`, with tests; and `swimblocks/.github-private`,
+  created with `scripts/create-repo.sh`, holding the weekly workflow that runs it.
 - Org setup, done once by an org owner: install the
   [Claude GitHub App](https://github.com/apps/claude) on all repositories, and add the
-  credential as an org Actions secret.
+  credential as an org Actions secret; create the `swimblocks-calibrator` App, install it on
+  all repositories, and add its credentials as secrets of the calibration workflow.
 - `scripts/create-repo.sh` prints the `readability-review.yml` caller next to the CI caller.
 - Every repo gets its `readability-review.yml` caller; only then does `settings.yml`'s ruleset
   require the review check, in a later settings release.
