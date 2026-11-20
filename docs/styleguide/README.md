@@ -1,54 +1,47 @@
 # SwimBlocks style guide
 
-What a reviewer checks beyond lint, for readability, whether the reviewer is a person or the
-automatic readability review of [design 0007](../design/0007-review-standard.md). Each file
-stands alone, so a reviewer can be given this one and the file for each language a pull request
-touches, and nothing else.
+How SwimBlocks code is written so that it reads well. These points apply in every language;
+each language adds its own:
 
 - [Go](go.md)
 - [Python](python.md)
 
-Readability only. Correctness, security and design are reviewed elsewhere: CI, the author's
-own review before handing off, and the human reviewer.
+**Lint is part of the style.** Code passes the org lint set for its language
+([CONTRIBUTING.md](../../CONTRIBUTING.md#quality-gates)), and what a linter checks isn't
+repeated here. This guide covers what takes judgement.
 
-## Points
+Each point has an ID made of its file and heading — `general/names`, `go/errors` — so a review
+comment can say which point it applies.
 
-Each point has an ID, the heading's anchor: `general/names`, `go/errors`. A review comment
-starts with the ID of the point it applies, in square brackets — `[go/errors]` — so the author
-can check the reasoning, and the weekly calibration report can count which points are accepted
-and which are rejected.
-
-### lint
-
-Nothing a linter or formatter enforces is reported. CI already says it, and saying it twice
-spends the reader's attention on what a machine has covered.
-
-### names
+## Names
 
 Names say what a thing is or does. A reader shouldn't need the implementation to follow a call.
 
-### functions
+## Functions
 
 A function does one thing at one level of abstraction. Deep nesting is flattened with early
 returns.
 
-### comments
+## Comments
 
-Comments say why, not what. Exported API is documented for its callers. A TODO links an issue
+A comment explains what the code can't say for itself: why it is this way, not what it does.
+Exported API carries doc comments written for its callers — what it does, and what they need to
+know to use it. A TODO links the issue that will resolve it
 ([CONTRIBUTING.md](../../CONTRIBUTING.md#code-comments)).
 
-### abstraction
+## Abstraction
 
 No speculative abstraction: an interface, option or layer earns its place with a second user.
 
-### tests
+## Tests
 
 Tests read as specifications: each case says what it checks, and a failure message names the
 input, what came back and what was wanted.
 
 ## Changing this guide
 
-A point raised in review more than once gets written down here. A point the calibration report
-shows is mostly rejected gets reworded or removed; one that is mostly accepted and mechanical
-becomes a linter's job and leaves this guide. Either way, it's an ordinary issue and pull
-request against this directory.
+A point raised in review more than once gets written down here. A point that review keeps
+rejecting gets reworded or removed; one that is mechanical enough for a linter becomes the
+linter's job and leaves this guide. Either way, it's an ordinary issue and pull request against
+this directory. The planned calibration report
+([design 0007](../design/0007-review-standard.md#calibration-report)) will supply the evidence.

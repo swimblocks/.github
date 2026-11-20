@@ -213,8 +213,9 @@ agreement.
   **A finding that is wrong in context is suppressed on its line, with the reason** —
   `//nolint:bodyclose // the call owns the response and closes it in close()` — not by
   switching the linter off. `nolintlint` rejects a suppression that names no linter or gives no
-  reason. Suppressions are data: the weekly calibration report reads them to suggest changes to
-  this list ([design 0007](docs/design/0007-review-standard.md)).
+  reason, so every suppression records a judgement. The planned weekly calibration report
+  ([design 0007](docs/design/0007-review-standard.md#calibration-report)) will read them to
+  suggest changes to this list.
 
   Run `golangci-lint run` (and `golangci-lint run --fix` to auto-fix) before pushing.
 - **Tests:** `uv run pytest -q`; in Go repos, `go test ./...`. Add coverage for new behaviour
@@ -236,12 +237,12 @@ agreement.
 
 ## Code review
 
-Lint covers what is mechanical. For readability, reviewers — human or automatic — apply the
-org style guide in [`docs/styleguide/`](docs/styleguide/README.md): a few points for every
-language, then one file per language, built on Google's
+Code follows the org style guide in [`docs/styleguide/`](docs/styleguide/README.md): the lint
+set above, a few points for every language, then one file per language, built on Google's
 [Go](https://google.github.io/styleguide/go/) and
-[Python](https://google.github.io/styleguide/pyguide.html) style guides. A review comment starts
-with the ID of the point it applies (`[go/errors]`), so the author can check the reasoning.
+[Python](https://google.github.io/styleguide/pyguide.html) style guides. A review comment that
+applies one of its points names the point's ID (`go/errors`), so the author can check the
+reasoning.
 
 ## Dependencies
 
