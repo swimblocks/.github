@@ -56,5 +56,8 @@ echo "Next: add per-repo CI calling the shared workflow for the repo's language:
 echo "        Python: uses: swimblocks/.github/.github/workflows/reusable-python-ci.yml@main"
 echo "        Go:     uses: swimblocks/.github/.github/workflows/reusable-go-ci.yml@main"
 echo "      (a Go repo starts on the current stable Go release, named by go.mod's go directive),"
+echo "      add .github/workflows/readability-review.yml calling"
+echo "        uses: swimblocks/.github/.github/workflows/reusable-readability-review.yml@main"
+echo "      (the full caller, with its triggers and permissions, is in CONTRIBUTING.md's Code review),"
 echo "      add a per-repo .github/dependabot.yml, draft an AGENTS.md."
 echo "When ready to release publicly: scripts/make-public.sh $REPO"

@@ -62,7 +62,9 @@ For **every** change:
    - **Raise open questions here, not in the PR description.** A question written into a PR
      reads as though the author is asking their reviewers — it sponsors a question they never
      asked and hands your decision to their collaborators.
-5. **Wait for CI green** (lint + tests) once the PR exists.
+5. **Wait for CI green** (lint + tests) once the PR exists. The automatic readability review
+   comments against the [style guide](docs/styleguide/README.md); when asked to address its
+   findings, change the code or reply saying why not, in each thread.
 6. **Do not self-merge.** Post the PR link and stop. *Exception:* a large mechanical change
    spanning many repos may be agent-opened and agent-merged by prior agreement with the author.
 7. The human reviews and squash-merges.

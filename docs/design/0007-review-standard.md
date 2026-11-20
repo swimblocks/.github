@@ -225,9 +225,11 @@ each finding as an inline comment.
   reviewing again.
 - **What it's given:** the diff, and the style guide for the languages the diff touches —
   `docs/styleguide/README.md` plus `go.md` for `.go` files, `python.md` for `.py` files —
-  checked out from this repo. It does not check out the repo under review, so it loads none of
-  that repo's `CLAUDE.md`, `AGENTS.md` or design docs. Where a name or an API can't be judged
-  from the diff alone, it reads the touched file, or its callers, through the GitHub API.
+  checked out from this repo. The pull request's code is checked out too, so a name or an API
+  can be judged in its file and its callers, but with its `CLAUDE.md`, `AGENTS.md` and
+  `.claude/` removed: the review gets the style guide and the change, not the repo's own context.
+  Reading files locally needs no GitHub API access beyond posting, which keeps Claude's tools to
+  reading files and posting comments.
 - **What it's told:** readability only — not correctness, security or design. Nothing a linter
   enforces. Each comment names the style-guide point it applies, in a fixed form the calibration
   report can read, so the author can check the reasoning and the comment teaches as well as
