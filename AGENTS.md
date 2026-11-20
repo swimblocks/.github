@@ -52,7 +52,9 @@ For **every** change:
 2. **Branch** off `main`, named `<issue-number>-<short-slug>` (or a descriptive slug, for a
    `no-issue` PR).
 3. **Make focused commits.** Coherent, single-purpose. Run `ruff check .` and `pytest -q`
-   locally before pushing.
+   locally before pushing. Before handing off, review your own diff for bugs (in Claude Code,
+   `/code-review`) and fix what you find, so the author isn't reading problems a reviewer
+   raises minutes after the PR opens.
 4. **Hand off for local review — do not open the PR.** Nobody opens a pull request carrying
    work its author hasn't read, and the author hasn't seen yours. Push the branch, post a
    short summary (what changed, why, lint/test results), and stop. The author reviews
