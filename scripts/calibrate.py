@@ -49,7 +49,8 @@ SAMPLE_SIZE = 5  # findings quoted in a disabled linter's issue
 STYLE_MIN_FINDINGS = 3  # findings a point needs, accepted or rejected, to be judged
 STYLE_REJECTED_FLAG = 0.5  # rejected more often than this: reword or remove
 STYLE_ACCEPTED_FLAG = 0.75  # accepted at least this often: a linter candidate
-STRONGER = 2  # a closed case is "much stronger" at this multiple of its count
+LISTED = 40  # evidence lines an issue body or comment lists before "and N more"
+COMPARE_FILES = 300  # GitHub's compare lists no more files than this
 
 REVIEWER = "claude[bot]"  # the Claude GitHub App, which posts the review's findings
 REVIEW_START = "2026-11-23"  # the first day the readability review ran
@@ -62,7 +63,6 @@ LINT_SET = (
 
 KEY_MARKER = re.compile(r"<!-- calibration-key: (\S+) -->")
 STATE_MARKER = re.compile(r"<!-- calibration-state: (\{.*?\}) -->")
-STRONGER_MARKER = "<!-- calibration-stronger -->"
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ class Observation:
     key: str
     title: str
     flagged: bool
-    # How strong the case is; compared when a closed issue's case grows.
+    # How strong the case is, for the run summary.
     count: int
     # The issue body: the observation, its numbers, the suggested change.
     statement: str
@@ -90,14 +90,12 @@ class Issue:
     number: int
     open: bool
     key: str
-    count: int
     seen: set[str]
-    stronger_noted: bool = False
 
 
 @dataclass
 class Action:
-    kind: str  # "create", "update" or "stronger"
+    kind: str  # "create", "update" or "reopen"
     observation: Observation
     issue: int | None = None
     new_evidence: list[str] = field(default_factory=list)
@@ -119,8 +117,24 @@ def evidence_ids(items: list[tuple[str, ...]]) -> list[str]:
     return ids
 
 
+def quoted(text: str) -> str:
+    """*text*, written by someone else, made safe to quote in an issue.
+
+    An `@name` in it would notify that person, and an HTML comment could pass for one of
+    the issue's hidden markers.
+    """
+    return text.replace("@", "@\u2060").replace("<", "&lt;")
+
+
+def listed(lines: list[str]) -> str:
+    """A markdown list of *lines*, cut short so an issue stays within GitHub's limit."""
+    shown = "\n".join(f"- {line}" for line in lines[:LISTED])
+    more = len(lines) - LISTED
+    return shown + (f"\n- and {more} more" if more > 0 else "")
+
+
 def issue_body(obs: Observation) -> str:
-    state = {"count": obs.count, "seen": sorted(obs.evidence)}
+    state = {"seen": sorted(obs.evidence)}
     return (
         f"{obs.statement}\n\n"
         f"<!-- calibration-key: {obs.key} -->\n"
@@ -129,17 +143,20 @@ def issue_body(obs: Observation) -> str:
 
 
 def parse_issue(number: int, state: str, body: str) -> Issue | None:
-    """The calibration issue behind *body*, or None if it carries no key."""
-    key = KEY_MARKER.search(body or "")
-    if not key:
+    """The calibration issue behind *body*, or None if it carries no key.
+
+    The markers are read from the end of the body, where issue_body() puts them, so
+    quoted text above them can't pass for them.
+    """
+    keys = KEY_MARKER.findall(body or "")
+    if not keys:
         return None
-    saved = STATE_MARKER.search(body)
-    data = json.loads(saved.group(1)) if saved else {}
+    saved = STATE_MARKER.findall(body)
+    data = json.loads(saved[-1]) if saved else {}
     return Issue(
         number=number,
         open=state.upper() == "OPEN",
-        key=key.group(1),
-        count=int(data.get("count", 0)),
+        key=keys[-1],
         seen=set(data.get("seen", [])),
     )
 
@@ -147,10 +164,10 @@ def parse_issue(number: int, state: str, body: str) -> Issue | None:
 def plan(observations: list[Observation], issues: list[Issue]) -> list[Action]:
     """What to post this week.
 
-    A flagged observation with no issue gets one. An open issue whose observation has
-    new evidence gets a comment and a rewritten body. A closed issue is never reopened:
-    if its case grows to STRONGER times what it was, it gets one comment saying so, and
-    then nothing more. A week with nothing new touches nothing.
+    A flagged observation with no issue gets one. An issue whose observation has new
+    evidence gets a comment saying what's new and a rewritten body, and is reopened if
+    it was closed: closing decides the case as it stood, not as it grows. A week with
+    nothing new touches nothing.
     """
     by_key = {issue.key: issue for issue in issues}
     actions = []
@@ -159,30 +176,22 @@ def plan(observations: list[Observation], issues: list[Issue]) -> list[Action]:
         if issue is None:
             if obs.flagged:
                 actions.append(Action("create", obs))
-        elif issue.open:
-            new = [line for eid, line in obs.evidence.items() if eid not in issue.seen]
-            if new:
-                actions.append(Action("update", obs, issue.number, new))
-        elif not issue.stronger_noted and issue.count:
-            if obs.count >= STRONGER * issue.count:
-                actions.append(Action("stronger", obs, issue.number))
+            continue
+        new = [line for eid, line in obs.evidence.items() if eid not in issue.seen]
+        if new:
+            kind = "update" if issue.open else "reopen"
+            actions.append(Action(kind, obs, issue.number, new))
     return actions
 
 
 def update_comment(action: Action) -> str:
-    lines = "\n".join(f"- {line}" for line in action.new_evidence)
+    if action.kind == "reopen":
+        opening = "This case has come back since the issue was closed:"
+    else:
+        opening = "New since the last report:"
     return (
-        f"New since the last report:\n\n{lines}\n\n"
+        f"{opening}\n\n{listed(action.new_evidence)}\n\n"
         "The description now gives the case as it stands."
-    )
-
-
-def stronger_comment(action: Action, was: int) -> str:
-    return (
-        f"{STRONGER_MARKER}\n"
-        f"This case has grown since it was closed: {action.observation.count} now, "
-        f"against {was} then. The calibration report won't reopen it or say this "
-        f"again.\n\n{action.observation.statement}"
     )
 
 
@@ -229,6 +238,10 @@ def find_suppressions(repo: str, root: Path) -> list[Suppression]:
     return found
 
 
+def reasons(group: list[Suppression]) -> list[str]:
+    return [quoted(s.reason) if s.reason else "*(none)*" for s in group]
+
+
 def suppression_observations(
     found: list[Suppression], links: dict[str, str]
 ) -> list[Observation]:
@@ -239,8 +252,8 @@ def suppression_observations(
     for linter, group in sorted(by_linter.items()):
         ids = evidence_ids([(s.repo, s.path, s.linter, s.reason) for s in group])
         lines = {
-            eid: f"{where(links, s.repo, s.path, s.line)}: {s.reason or '*(none)*'}"
-            for eid, s in zip(ids, group)
+            eid: f"{where(links, s.repo, s.path, s.line)}: {why}"
+            for eid, s, why in zip(ids, group, reasons(group))
         }
         statement = (
             f"`{linter}` is suppressed {len(group)} times across the org's Go repos. "
@@ -249,7 +262,7 @@ def suppression_observations(
             f"**Suggested change:** configure `{linter}` in the org's `.golangci.yml` "
             f"([lint set]({LINT_SET})) so these stop firing, or move it to the "
             "disable list with the reason it doesn't fit.\n\n"
-            + "\n".join(f"- {line}" for line in lines.values())
+            + listed(list(lines.values()))
         )
         observations.append(
             Observation(
@@ -325,11 +338,11 @@ def disabled_observations(
         group = by_linter.get(linter, [])
         ids = evidence_ids([(f.repo, f.path, f.linter, f.text) for f in group])
         lines = {
-            eid: f"{where(links, f.repo, f.path, f.line)}: {f.text}"
+            eid: f"{where(links, f.repo, f.path, f.line)}: {quoted(f.text)}"
             for eid, f in zip(ids, group)
         }
         sample = "\n".join(
-            f"- {where(links, f.repo, f.path, f.line)}: {f.text}"
+            f"- {where(links, f.repo, f.path, f.line)}: {quoted(f.text)}"
             + (f"\n  ```go\n  {f.source}\n  ```" if f.source else "")
             for f in group[:SAMPLE_SIZE]
         )
@@ -364,7 +377,7 @@ UNCITED = "uncited"  # the point of a finding that names none
 UNAVAILABLE: dict = {}  # a compare GitHub couldn't produce
 
 POINT = re.compile(r"^\s*\[([a-z]+/[a-z-]+)\]")
-HUNK = re.compile(r"^@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@")
+HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@")
 
 
 @dataclass
@@ -398,7 +411,9 @@ def touched_old_lines(patch: str) -> set[int]:
     for text in patch.splitlines():
         hunk = HUNK.match(text)
         if hunk:
-            old, replacing = int(hunk.group(1)), False
+            # `-N,0` is an insertion after old line N; any other hunk starts at N.
+            old = int(hunk.group(1)) + (hunk.group(2) == "0")
+            replacing = False
         elif old is None or text.startswith("\\"):
             continue
         elif text.startswith("-"):
@@ -416,24 +431,32 @@ def outcome(comment: dict, compare: dict | None) -> str:
     """Whether the lines *comment* is on changed between its commit and the merged head.
 
     *compare* is GitHub's compare of the comment's commit with the pull request's head,
-    or None when they are the same commit.
+    or None when they are the same commit. It can only be trusted when the head is
+    ahead of the comment's commit; after a rebase it diffs from an older merge base,
+    whose line numbers aren't the comment's.
     """
     if compare is None:
         return "rejected"
+    if compare.get("status") != "ahead":
+        return "unknown"
     if comment.get("side") == "LEFT" or not comment.get("original_line"):
         return "unknown"
-    for changed in compare.get("files") or []:
-        if changed.get("filename") != comment["path"]:
+    files = compare.get("files") or []
+    for changed in files:
+        names = (changed.get("filename"), changed.get("previous_filename"))
+        if comment["path"] not in names:
             continue
-        if changed.get("status") in ("removed", "renamed"):
+        if changed.get("status") == "removed":
             return "accepted"
-        if "patch" not in changed:  # GitHub leaves out a patch that is too large
-            return "unknown"
+        if "patch" not in changed:
+            # A pure rename has no patch, and changes no line; a large diff has none.
+            return "rejected" if changed.get("changes") == 0 else "unknown"
         end = comment["original_line"]
         start = comment.get("original_start_line") or end
         touched = touched_old_lines(changed["patch"])
         return "accepted" if touched & set(range(start, end + 1)) else "rejected"
-    return "rejected"
+    # Not in the list: unchanged, unless the list was cut off.
+    return "unknown" if len(files) >= COMPARE_FILES else "rejected"
 
 
 def point_link(point: str) -> str:
@@ -444,7 +467,7 @@ def point_link(point: str) -> str:
 
 
 def finding_line(f: Finding) -> str:
-    replies = "".join(f"\n  > {reply}" for reply in f.replies)
+    replies = "".join(f"\n  > {quoted(reply)}" for reply in f.replies)
     return f"[{f.repo}#{f.pr}]({f.url}): {f.outcome}{replies}"
 
 
@@ -458,7 +481,7 @@ def style_observation(
     statement = (
         f"The readability review cited {point_link(point)} {len(group)} times on "
         f"merged pull requests, and {len(chosen)} of those findings were {kind}. "
-        f"{case}\n\n" + "\n".join(f"- {line}" for line in lines.values())
+        f"{case}\n\n" + listed(list(lines.values()))
     )
     return Observation(
         key=f"style:{point}:{kind}",
@@ -616,13 +639,7 @@ def list_issues(repo: str) -> list[Issue]:
     out = gh("issue", "list", "--repo", repo, "--label", LABEL, "--state", "all",
              "--limit", "1000", "--json", "number,state,body")  # fmt: skip
     parsed = (parse_issue(r["number"], r["state"], r["body"]) for r in json.loads(out))
-    issues = [issue for issue in parsed if issue]
-    for issue in issues:
-        if not issue.open:
-            comments = gh_api_lines(f"repos/{repo}/issues/{issue.number}/comments",
-                                    ".[].body")  # fmt: skip
-            issue.stronger_noted = any(STRONGER_MARKER in body for body in comments)
-    return issues
+    return [issue for issue in parsed if issue]
 
 
 def ensure_label(repo: str) -> None:
@@ -634,23 +651,21 @@ def ensure_label(repo: str) -> None:
            "--description", description)  # fmt: skip
 
 
-def carry_out(repo: str, action: Action, issues: dict[int, Issue]) -> str:
+def carry_out(repo: str, action: Action) -> str:
     obs = action.observation
     if action.kind == "create":
         url = gh("issue", "create", "--repo", repo, "--title", obs.title, "--label",
                  LABEL, "--body-file", "-", stdin=issue_body(obs))  # fmt: skip
         return f"opened {url.strip()}: {obs.title}"
     number = str(action.issue)
-    if action.kind == "update":
-        gh("issue", "comment", number, "--repo", repo, "--body-file", "-",
-           stdin=update_comment(action))  # fmt: skip
-        gh("issue", "edit", number, "--repo", repo, "--title", obs.title,
-           "--body-file", "-", stdin=issue_body(obs))  # fmt: skip
-        return f"updated #{number}: {obs.title}"
-    was = issues[action.issue].count
+    gh("issue", "edit", number, "--repo", repo, "--title", obs.title,
+       "--body-file", "-", stdin=issue_body(obs))  # fmt: skip
     gh("issue", "comment", number, "--repo", repo, "--body-file", "-",
-       stdin=stronger_comment(action, was))  # fmt: skip
-    return f"noted on closed #{number}: {obs.title}"
+       stdin=update_comment(action))  # fmt: skip
+    if action.kind == "reopen":
+        gh("issue", "reopen", number, "--repo", repo)
+        return f"reopened #{number}: {obs.title}"
+    return f"updated #{number}: {obs.title}"
 
 
 # ---------------------------------------------------------------------------
@@ -748,7 +763,14 @@ def main(argv: list[str]) -> int:
 
     with tempfile.TemporaryDirectory() as tmp:
         for repo in list_repos(opts.org):
-            path, links[repo] = clone(repo, Path(tmp))
+            try:
+                path, links[repo] = clone(repo, Path(tmp))
+            except subprocess.CalledProcessError as exc:
+                error = (exc.stderr or "").strip()[-300:]
+                notes.append(
+                    f"`{repo}` couldn't be cloned, so it was left out: {error}"
+                )
+                continue
             if not (path / "go.mod").exists():
                 continue
             print(f"{repo}: Go")
@@ -792,6 +814,7 @@ def main(argv: list[str]) -> int:
     actions = plan(observations, issues)
 
     results = []
+    failed = False
     if opts.dry_run:
         for action in actions:
             target = f" #{action.issue}" if action.issue else ""
@@ -799,16 +822,22 @@ def main(argv: list[str]) -> int:
     else:
         if actions:
             ensure_label(opts.issues_repo)
-        by_number = {issue.number: issue for issue in issues}
+        # One post GitHub refuses mustn't cost the rest, or the summary.
         for action in actions:
-            results.append(carry_out(opts.issues_repo, action, by_number))
+            try:
+                results.append(carry_out(opts.issues_repo, action))
+            except subprocess.CalledProcessError as exc:
+                failed = True
+                error = (exc.stderr or "").strip()[-300:]
+                title = action.observation.title
+                results.append(f"FAILED to {action.kind} {title}: {error}")
 
     report = summary(observations, week, results, notes)
     print(report)
     if opts.summary_file:
         with open(opts.summary_file, "a", encoding="utf-8") as f:
             f.write(report)
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

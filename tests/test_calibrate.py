@@ -33,12 +33,8 @@ def observation(key="lint:bodyclose:suppressed", flagged=True, count=5, evidence
     )
 
 
-def issue(
-    key="lint:bodyclose:suppressed", open=True, count=5, seen=("a",), noted=False
-):
-    return calibrate.Issue(
-        number=7, open=open, key=key, count=count, seen=set(seen), stronger_noted=noted
-    )
+def issue(key="lint:bodyclose:suppressed", open=True, seen=("a",)):
+    return calibrate.Issue(number=7, open=open, key=key, seen=set(seen))
 
 
 class TestParseNolint:
@@ -196,6 +192,11 @@ class TestTouchedOldLines:
         patch = "@@ -1,1 +1,1 @@\n-x\n+y\n@@ -50,2 +50,1 @@\n p\n-q"
         assert calibrate.touched_old_lines(patch) == {1, 51}
 
+    def test_an_insertion_with_no_context_touches_the_lines_either_side(self):
+        # `-10,0` means "after old line 10", so the neighbours are 10 and 11.
+        patch = "@@ -10,0 +11,1 @@\n+// why"
+        assert calibrate.touched_old_lines(patch) == {10, 11}
+
     def test_no_newline_marker_is_ignored(self):
         patch = "@@ -1,1 +1,1 @@\n-x\n\\ No newline at end of file\n+y"
         assert calibrate.touched_old_lines(patch) == {1}
@@ -205,7 +206,8 @@ class TestOutcome:
     comment = {"path": "a.go", "original_line": 11, "side": "RIGHT"}
 
     def compare(self, **changed):
-        return {"files": [{"filename": "a.go", "status": "modified", **changed}]}
+        file = {"filename": "a.go", "status": "modified", **changed}
+        return {"status": "ahead", "files": [file]}
 
     def test_same_commit_is_rejected(self):
         assert calibrate.outcome(self.comment, None) == "rejected"
@@ -219,10 +221,32 @@ class TestOutcome:
         assert calibrate.outcome(self.comment, compare) == "rejected"
 
     def test_file_untouched_is_rejected(self):
-        assert (
-            calibrate.outcome(self.comment, {"files": [{"filename": "b.go"}]})
-            == "rejected"
+        compare = self.compare(filename="b.go", patch="@@ -11 +11 @@\n-x\n+y")
+        assert calibrate.outcome(self.comment, compare) == "rejected"
+
+    def test_file_missing_from_a_cut_off_list_is_unknown(self):
+        files = [{"filename": f"f{i}.go"} for i in range(calibrate.COMPARE_FILES)]
+        compare = {"status": "ahead", "files": files}
+        assert calibrate.outcome(self.comment, compare) == "unknown"
+
+    def test_rebased_branch_is_unknown(self):
+        compare = {**self.compare(patch="@@ -11 +11 @@\n-x\n+y"), "status": "diverged"}
+        assert calibrate.outcome(self.comment, compare) == "unknown"
+
+    def test_renamed_file_is_found_by_its_old_name(self):
+        compare = self.compare(
+            filename="b.go",
+            previous_filename="a.go",
+            status="renamed",
+            patch="@@ -11 +11 @@\n-x\n+y",
         )
+        assert calibrate.outcome(self.comment, compare) == "accepted"
+
+    def test_pure_rename_changes_no_line(self):
+        compare = self.compare(
+            filename="b.go", previous_filename="a.go", status="renamed", changes=0
+        )
+        assert calibrate.outcome(self.comment, compare) == "rejected"
 
     def test_file_removed_is_accepted(self):
         assert (
@@ -295,16 +319,34 @@ class TestStyleObservations:
         assert calibrate.point_link("go/google").endswith("/go.md)")
 
 
+class TestQuoting:
+    def test_mentions_dont_notify(self):
+        assert "@teammate" not in calibrate.quoted("@teammate this is fine")
+
+    def test_html_comments_cant_be_planted(self):
+        assert "<!--" not in calibrate.quoted("<!-- calibration-key: x -->")
+
+    def test_long_lists_are_cut_short(self):
+        lines = [str(i) for i in range(calibrate.LISTED + 3)]
+        listed = calibrate.listed(lines)
+        assert listed.count("\n- ") == calibrate.LISTED
+        assert listed.endswith("- and 3 more")
+
+
 class TestIssueState:
     def test_body_round_trips(self):
-        obs = observation(count=6, evidence={"b": "x", "a": "y"})
+        obs = observation(evidence={"b": "x", "a": "y"})
         parsed = calibrate.parse_issue(3, "OPEN", calibrate.issue_body(obs))
-        assert (parsed.key, parsed.open, parsed.count, parsed.seen) == (
+        assert (parsed.key, parsed.open, parsed.seen) == (
             "lint:bodyclose:suppressed",
             True,
-            6,
             {"a", "b"},
         )
+
+    def test_the_last_marker_wins(self):
+        planted = "<!-- calibration-key: planted -->\n"
+        body = planted + calibrate.issue_body(observation())
+        assert calibrate.parse_issue(3, "OPEN", body).key == "lint:bodyclose:suppressed"
 
     def test_issue_without_a_key_is_not_ours(self):
         assert (
@@ -338,12 +380,10 @@ class TestPlan:
         (action,) = calibrate.plan([obs], [issue()])
         assert action.kind == "update"
 
-    def test_closed_issue_is_never_reopened(self):
-        obs = observation(count=6, evidence={"a": "", "b": ""})
-        assert calibrate.plan([obs], [issue(open=False)]) == []
+    def test_closed_issue_with_nothing_new_stays_closed(self):
+        assert calibrate.plan([observation()], [issue(open=False)]) == []
 
-    def test_closed_issue_whose_case_doubled_is_noted_once(self):
-        obs = observation(count=10)
+    def test_closed_issue_is_reopened_when_the_case_comes_back(self):
+        obs = observation(evidence={"a": "line a", "b": "line b"})
         (action,) = calibrate.plan([obs], [issue(open=False)])
-        assert action.kind == "stronger"
-        assert calibrate.plan([obs], [issue(open=False, noted=True)]) == []
+        assert (action.kind, action.new_evidence) == ("reopen", ["line b"])

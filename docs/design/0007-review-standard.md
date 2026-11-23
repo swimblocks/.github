@@ -345,8 +345,11 @@ suppressions or rejections, with their reasons — it adds a comment saying what
 rewrites the body so it stays a short statement of the case as it now stands: the observation,
 the current numbers, the suggested change. History lives in the comments; the body stays
 succinct. A week with nothing new touches nothing. Closing the issue is the decision — acting
-on it, or deciding not to — and a closed key is never reopened by the workflow; if the case
-grows much stronger, it says so on the closed issue once. The full weekly numbers, flagged or
+on it, or deciding not to — about the case as it stood. If the case comes back, with new
+suppressions, findings or rejections, the workflow reopens the issue with a comment saying what's
+new, so a case closed as small can't grow unseen. A reason given when closing makes the next
+reopen quick to judge. If reopens become a nuisance, that is the time to add a way to quiet
+them. The full weekly numbers, flagged or
 not, go in the workflow run's summary, not in an issue.
 
 The workflow posts as itself, so the issues read as the bot's, not anyone's. It suggests;
