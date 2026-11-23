@@ -83,6 +83,8 @@ class Observation:
     statement: str
     # Evidence id -> one markdown line describing it.
     evidence: dict[str, str] = field(default_factory=dict)
+    # Some of the evidence couldn't be gathered, so the case isn't judged this week.
+    partial: bool = False
 
 
 @dataclass
@@ -99,6 +101,8 @@ class Action:
     observation: Observation
     issue: int | None = None
     new_evidence: list[str] = field(default_factory=list)
+    # Evidence the issue has already listed, kept when it rewrites the issue.
+    seen: set[str] = field(default_factory=set)
 
 
 def evidence_ids(items: list[tuple[str, ...]]) -> list[str]:
@@ -133,8 +137,12 @@ def listed(lines: list[str]) -> str:
     return shown + (f"\n- and {more} more" if more > 0 else "")
 
 
-def issue_body(obs: Observation) -> str:
-    state = {"seen": sorted(obs.evidence)}
+def issue_body(obs: Observation, seen: set[str] = frozenset()) -> str:
+    """The issue for *obs*, its hidden state listing this week's evidence and *seen*.
+
+    Evidence that goes away and comes back has been listed before, so it isn't new.
+    """
+    state = {"seen": sorted(set(obs.evidence) | set(seen))}
     return (
         f"{obs.statement}\n\n"
         f"<!-- calibration-key: {obs.key} -->\n"
@@ -180,7 +188,7 @@ def plan(observations: list[Observation], issues: list[Issue]) -> list[Action]:
         new = [line for eid, line in obs.evidence.items() if eid not in issue.seen]
         if new:
             kind = "update" if issue.open else "reopen"
-            actions.append(Action(kind, obs, issue.number, new))
+            actions.append(Action(kind, obs, issue.number, new, issue.seen))
     return actions
 
 
@@ -318,7 +326,7 @@ def run_disabled_linters(
     """Every finding the disabled linters would report in *root*, from one run."""
     command = ["golangci-lint", "run", "--enable-only", ",".join(linters)]
     command += ["--output.json.path", "stdout", "--show-stats=false"]
-    command += ["--issues-exit-code", "0"]
+    command += ["--issues-exit-code", "0", "--uniq-by-line=false"]
     command += ["--max-issues-per-linter", "0", "--max-same-issues", "0", "./..."]
     result = subprocess.run(command, cwd=root, capture_output=True, text=True)
     if result.returncode != 0:
@@ -328,8 +336,16 @@ def run_disabled_linters(
 
 
 def disabled_observations(
-    linters: set[str], found: list[LintFinding], links: dict[str, str]
+    linters: set[str],
+    found: list[LintFinding],
+    links: dict[str, str],
+    partial: set[str] = frozenset(),
 ) -> list[Observation]:
+    """A case per disabled linter: switched on, it would report only a few findings.
+
+    A linter in *partial* failed to run in some repo, so its count leaves that repo out
+    and its case isn't flagged.
+    """
     by_linter = defaultdict(list)
     for f in found:
         by_linter[f.linter].append(f)
@@ -356,14 +372,20 @@ def disabled_observations(
             "it finds, unless the reason it's off still holds.\n\n"
             f"Sample:\n\n{sample}"
         )
+        if linter in partial:
+            statement = (
+                "**Incomplete:** the lint run failed in at least one repo, so these "
+                "counts leave it out.\n\n" + statement
+            )
         observations.append(
             Observation(
                 key=f"lint:{linter}:disabled",
                 title=f"{linter} is off and would report {findings}",
-                flagged=1 <= len(group) <= FEW_FINDINGS,
+                flagged=linter not in partial and 1 <= len(group) <= FEW_FINDINGS,
                 count=len(group),
                 statement=statement,
                 evidence=lines,
+                partial=linter in partial,
             )
         )
     return observations
@@ -435,11 +457,11 @@ def outcome(comment: dict, compare: dict | None) -> str:
     ahead of the comment's commit; after a rebase it diffs from an older merge base,
     whose line numbers aren't the comment's.
     """
+    if comment.get("side") == "LEFT" or not comment.get("original_line"):
+        return "unknown"
     if compare is None:
         return "rejected"
     if compare.get("status") != "ahead":
-        return "unknown"
-    if comment.get("side") == "LEFT" or not comment.get("original_line"):
         return "unknown"
     files = compare.get("files") or []
     for changed in files:
@@ -474,10 +496,14 @@ def finding_line(f: Finding) -> str:
 def style_observation(
     point: str, group: list[Finding], kind: str, flagged: bool, case: str
 ) -> Observation:
-    """The case that *point* is *kind* ("accepted" or "rejected") too often."""
+    """The case that *point* is *kind* ("accepted" or "rejected") too often.
+
+    Every finding on the point is evidence, whatever its outcome, since each one moves
+    the share the case rests on.
+    """
     chosen = [f for f in group if f.outcome == kind]
-    ids = evidence_ids([(str(f.comment_id),) for f in chosen])
-    lines = dict(zip(ids, map(finding_line, chosen)))
+    ids = evidence_ids([(str(f.comment_id),) for f in group])
+    lines = dict(zip(ids, map(finding_line, group)))
     statement = (
         f"The readability review cited {point_link(point)} {len(group)} times on "
         f"merged pull requests, and {len(chosen)} of those findings were {kind}. "
@@ -657,15 +683,17 @@ def carry_out(repo: str, action: Action) -> str:
         url = gh("issue", "create", "--repo", repo, "--title", obs.title, "--label",
                  LABEL, "--body-file", "-", stdin=issue_body(obs))  # fmt: skip
         return f"opened {url.strip()}: {obs.title}"
+    # The body holds what has been reported, so it is written last: if the comment or
+    # the reopen fails, next week finds the same evidence new and tries again.
     number = str(action.issue)
-    gh("issue", "edit", number, "--repo", repo, "--title", obs.title,
-       "--body-file", "-", stdin=issue_body(obs))  # fmt: skip
     gh("issue", "comment", number, "--repo", repo, "--body-file", "-",
        stdin=update_comment(action))  # fmt: skip
     if action.kind == "reopen":
         gh("issue", "reopen", number, "--repo", repo)
-        return f"reopened #{number}: {obs.title}"
-    return f"updated #{number}: {obs.title}"
+    gh("issue", "edit", number, "--repo", repo, "--title", obs.title,
+       "--body-file", "-", stdin=issue_body(obs, action.seen))  # fmt: skip
+    verb = "reopened" if action.kind == "reopen" else "updated"
+    return f"{verb} #{number}: {obs.title}"
 
 
 # ---------------------------------------------------------------------------
@@ -678,6 +706,7 @@ def summary(
     week: list[Finding],
     results: list[str],
     notes: list[str],
+    failures: list[str] = (),
 ) -> str:
     """Every week's numbers, flagged or not, for the workflow run's summary."""
     lines = ["# Calibration report", ""]
@@ -694,7 +723,7 @@ def summary(
         ]
         for o in observations:
             if o.key.endswith(suffix):
-                flagged = "yes" if o.flagged else ""
+                flagged = "incomplete" if o.partial else "yes" if o.flagged else ""
                 lines.append(f"| `{o.key.split(':')[1]}` | {o.count} | {flagged} |")
         lines.append("")
     lines += ["## Readability findings on pull requests merged this week", ""]
@@ -708,6 +737,8 @@ def summary(
         )
     lines += ["", "## Issues", ""]
     lines += [f"- {r}" for r in results] or ["Nothing new this week."]
+    if failures:
+        lines += ["", "## Failures", ""] + [f"- {f}" for f in failures]
     if notes:
         lines += ["", "## Notes", ""] + [f"- {n}" for n in notes]
     return "\n".join(lines) + "\n"
@@ -753,12 +784,30 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: list[str]) -> int:
-    opts = parse_args(argv)
-    notes: list[str] = []
+@dataclass
+class Run:
+    """What one run found and did, kept so the summary has it whatever goes wrong."""
+
+    observations: list[Observation] = field(default_factory=list)
+    week: list[Finding] = field(default_factory=list)
+    results: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    # Anything that left the report incomplete or a post undone; the run fails on any.
+    failures: list[str] = field(default_factory=list)
+
+
+def error_text(exc: Exception) -> str:
+    if isinstance(exc, subprocess.CalledProcessError):
+        return (exc.stderr or str(exc)).strip()[-300:]
+    return str(exc)[-300:]
+
+
+def collect(opts: argparse.Namespace, run: Run) -> None:
+    """Gather the week's evidence into *run*'s observations."""
     suppressions: list[Suppression] = []
     lint_findings: list[LintFinding] = []
     off: set[str] = set()
+    partial: set[str] = set()
     links: dict[str, str] = {}
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -766,9 +815,9 @@ def main(argv: list[str]) -> int:
             try:
                 path, links[repo] = clone(repo, Path(tmp))
             except subprocess.CalledProcessError as exc:
-                error = (exc.stderr or "").strip()[-300:]
-                notes.append(
-                    f"`{repo}` couldn't be cloned, so it was left out: {error}"
+                run.failures.append(
+                    f"`{repo}` couldn't be cloned, so it was left out: "
+                    f"{error_text(exc)}"
                 )
                 continue
             if not (path / "go.mod").exists():
@@ -779,65 +828,100 @@ def main(argv: list[str]) -> int:
                 continue
             config = path / ".golangci.yml"
             if not config.exists():
-                notes.append(
+                run.notes.append(
                     f"`{repo}` has no `.golangci.yml`, so nothing was run in it."
                 )
                 continue
             linters = disabled_linters(config.read_text(encoding="utf-8"))
             if not linters:
-                notes.append(f"`{repo}`'s `.golangci.yml` disables no linter by name.")
+                run.notes.append(
+                    f"`{repo}`'s `.golangci.yml` disables no linter by name."
+                )
                 continue
             off.update(linters)
             try:
                 lint_findings += run_disabled_linters(repo, path, linters)
             except RuntimeError as exc:
-                notes.append(str(exc))
+                partial.update(linters)
+                run.failures.append(str(exc))
 
     findings: list[Finding] = []
     for repo, number in merged_prs(opts.org, opts.since):
-        findings += pr_findings(repo, number)
-    week = [f for f in findings if f.merged > opts.today - timedelta(days=7)]
+        try:
+            findings += pr_findings(repo, number)
+        except subprocess.CalledProcessError as exc:
+            run.failures.append(
+                f"{repo}#{number}'s review findings couldn't be read, so they aren't "
+                f"counted: {error_text(exc)}"
+            )
+    run.week = [f for f in findings if f.merged > opts.today - timedelta(days=7)]
     unknown = sum(f.outcome == "unknown" for f in findings)
     if unknown:
-        notes.append(f"{unknown} readability finding(s) couldn't be matched to the "
-                     "merged code, and aren't counted.")  # fmt: skip
+        run.notes.append(f"{unknown} readability finding(s) couldn't be matched to "
+                         "the merged code, and aren't counted.")  # fmt: skip
     uncited = sum(f.point == UNCITED for f in findings)
     if uncited:
-        notes.append(f"{uncited} readability finding(s) cite no style-guide point.")
+        run.notes.append(f"{uncited} readability finding(s) cite no style-guide point.")
 
-    observations = (
+    run.observations = (
         suppression_observations(suppressions, links)
-        + disabled_observations(off, lint_findings, links)
+        + disabled_observations(off, lint_findings, links, partial)
         + style_observations(findings)
     )
-    issues = list_issues(opts.issues_repo)
-    actions = plan(observations, issues)
 
-    results = []
-    failed = False
+
+def post(opts: argparse.Namespace, run: Run) -> None:
+    """Open, update or reopen the issues *run*'s observations call for."""
+    try:
+        issues = list_issues(opts.issues_repo)
+    except subprocess.CalledProcessError as exc:
+        # Without them, every case would look new and be opened again.
+        run.failures.append(
+            f"The calibration issues couldn't be listed, so nothing was posted: "
+            f"{error_text(exc)}"
+        )
+        return
+    actions = plan(run.observations, issues)
     if opts.dry_run:
         for action in actions:
             target = f" #{action.issue}" if action.issue else ""
-            results.append(f"would {action.kind}{target}: {action.observation.title}")
-    else:
-        if actions:
+            run.results.append(
+                f"would {action.kind}{target}: {action.observation.title}"
+            )
+        return
+    if actions:
+        try:
             ensure_label(opts.issues_repo)
-        # One post GitHub refuses mustn't cost the rest, or the summary.
-        for action in actions:
-            try:
-                results.append(carry_out(opts.issues_repo, action))
-            except subprocess.CalledProcessError as exc:
-                failed = True
-                error = (exc.stderr or "").strip()[-300:]
-                title = action.observation.title
-                results.append(f"FAILED to {action.kind} {title}: {error}")
+        except subprocess.CalledProcessError as exc:
+            run.failures.append(
+                f"The `{LABEL}` label couldn't be created, so nothing was posted: "
+                f"{error_text(exc)}"
+            )
+            return
+    # One post GitHub refuses mustn't cost the rest, or the summary.
+    for action in actions:
+        try:
+            run.results.append(carry_out(opts.issues_repo, action))
+        except subprocess.CalledProcessError as exc:
+            title = action.observation.title
+            run.failures.append(f"Couldn't {action.kind} {title}: {error_text(exc)}")
 
-    report = summary(observations, week, results, notes)
+
+def main(argv: list[str]) -> int:
+    opts = parse_args(argv)
+    run = Run()
+    try:
+        collect(opts, run)
+        post(opts, run)
+    except Exception as exc:  # whatever stopped it, the summary says so
+        run.failures.append(f"The run stopped early: {error_text(exc)}")
+
+    report = summary(run.observations, run.week, run.results, run.notes, run.failures)
     print(report)
     if opts.summary_file:
         with open(opts.summary_file, "a", encoding="utf-8") as f:
             f.write(report)
-    return 1 if failed else 0
+    return 1 if run.failures else 0
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
-"""Unit tests for the pure parts of scripts/calibrate.py: parsing what repos and pull
-requests record, and deciding what to post. Nothing here calls `gh`, `git` or
-golangci-lint.
+"""Unit tests for scripts/calibrate.py: parsing what repos and pull requests record,
+deciding what to post, and how a run fails. Nothing here calls `gh`, `git` or
+golangci-lint; the tests that need them replace them.
 """
 
 from __future__ import annotations
@@ -165,6 +165,25 @@ class TestDisabledLinters:
             calibrate.FEW_FINDINGS + 1: False,
         }
 
+    def test_a_linter_that_failed_somewhere_is_not_judged(self):
+        found = [
+            calibrate.LintFinding("swimblocks/fetch-service", "a.go", 1, "lll", "t", "")
+        ]
+        (obs,) = calibrate.disabled_observations({"lll"}, found, LINKS, {"lll"})
+        assert (obs.flagged, obs.partial) == (False, True)
+        assert obs.statement.startswith("**Incomplete:**")
+
+    def test_findings_on_one_line_are_all_kept(self, monkeypatch, tmp_path):
+        commands = []
+
+        def fake_run(command, **kwargs):
+            commands.append(command)
+            return calibrate.subprocess.CompletedProcess(command, 0, "{}", "")
+
+        monkeypatch.setattr(calibrate.subprocess, "run", fake_run)
+        calibrate.run_disabled_linters("swimblocks/fetch-service", tmp_path, ["lll"])
+        assert "--uniq-by-line=false" in commands[0]
+
 
 class TestParsePoint:
     def test_leading_id(self):
@@ -211,6 +230,13 @@ class TestOutcome:
 
     def test_same_commit_is_rejected(self):
         assert calibrate.outcome(self.comment, None) == "rejected"
+
+    def test_same_commit_on_a_deleted_line_is_unknown(self):
+        assert calibrate.outcome({**self.comment, "side": "LEFT"}, None) == "unknown"
+
+    def test_same_commit_without_a_line_is_unknown(self):
+        comment = {**self.comment, "original_line": None}
+        assert calibrate.outcome(comment, None) == "unknown"
 
     def test_commented_line_changed_is_accepted(self):
         compare = self.compare(patch="@@ -10,3 +10,3 @@\n a\n-b\n+B\n c")
@@ -314,6 +340,16 @@ class TestStyleObservations:
         )
         assert calibrate.style_observations(found) == []
 
+    def test_either_outcome_is_evidence_for_both_cases(self):
+        # A rejection weakens the accepted case, so its issue must hear of it.
+        before = calibrate.style_observations(self.findings(3, 0))
+        after = calibrate.style_observations(self.findings(3, 1))
+        accepted = {o.key: o for o in after}["style:go/errors:accepted"]
+        old = {o.key: o for o in before}["style:go/errors:accepted"]
+        issue_ = calibrate.Issue(7, True, accepted.key, set(old.evidence))
+        (action,) = calibrate.plan([accepted], [issue_])
+        assert action.kind == "update" and "rejected" in action.new_evidence[0]
+
     def test_point_link(self):
         assert calibrate.point_link("general/names").endswith("/README.md#names)")
         assert calibrate.point_link("go/google").endswith("/go.md)")
@@ -342,6 +378,11 @@ class TestIssueState:
             True,
             {"a", "b"},
         )
+
+    def test_evidence_that_went_away_stays_seen(self):
+        obs = observation(evidence={"b": "x", "c": "y"})
+        body = calibrate.issue_body(obs, {"a", "b"})
+        assert calibrate.parse_issue(3, "OPEN", body).seen == {"a", "b", "c"}
 
     def test_the_last_marker_wins(self):
         planted = "<!-- calibration-key: planted -->\n"
@@ -387,3 +428,82 @@ class TestPlan:
         obs = observation(evidence={"a": "line a", "b": "line b"})
         (action,) = calibrate.plan([obs], [issue(open=False)])
         assert (action.kind, action.new_evidence) == ("reopen", ["line b"])
+
+    def test_the_action_carries_what_the_issue_has_seen(self):
+        obs = observation(evidence={"b": "line b"})
+        (action,) = calibrate.plan([obs], [issue(seen=("a",))])
+        assert action.seen == {"a"}
+
+
+class TestCarryOut:
+    def test_the_state_is_saved_only_after_the_comment_and_reopen(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(
+            calibrate, "gh", lambda *args, stdin=None: calls.append((args, stdin)) or ""
+        )
+        obs = observation(evidence={"b": "line b"})
+        action = calibrate.Action("reopen", obs, 7, ["line b"], {"a"})
+        calibrate.carry_out("swimblocks/.github-private", action)
+        assert [args[1] for args, _ in calls] == ["comment", "reopen", "edit"]
+        saved = calibrate.parse_issue(7, "OPEN", calls[-1][1])
+        assert saved.seen == {"a", "b"}
+
+    def test_a_failed_comment_leaves_the_state_unsaved(self, monkeypatch):
+        calls = []
+
+        def gh(*args, stdin=None):
+            calls.append(args[1])
+            if args[1] == "comment":
+                raise calibrate.subprocess.CalledProcessError(1, "gh")
+            return ""
+
+        monkeypatch.setattr(calibrate, "gh", gh)
+        action = calibrate.Action("update", observation(), 7, ["line a"])
+        try:
+            calibrate.carry_out("swimblocks/.github-private", action)
+        except calibrate.subprocess.CalledProcessError:
+            pass
+        assert "edit" not in calls
+
+
+class TestMain:
+    ARGS = ["--org", "swimblocks", "--issues-repo", "swimblocks/.github-private",
+            "--skip-lint"]  # fmt: skip
+
+    def stub(self, monkeypatch, **replaced):
+        defaults = {
+            "list_repos": lambda org: [],
+            "merged_prs": lambda org, since: [],
+            "list_issues": lambda repo: [],
+        }
+        for name, fn in {**defaults, **replaced}.items():
+            monkeypatch.setattr(calibrate, name, fn)
+
+    def fail(self, *args, **kwargs):
+        raise calibrate.subprocess.CalledProcessError(1, "gh", stderr="HTTP 502")
+
+    def test_a_clean_run_succeeds(self, monkeypatch, tmp_path):
+        self.stub(monkeypatch)
+        out = tmp_path / "summary.md"
+        assert calibrate.main(self.ARGS + ["--summary-file", str(out)]) == 0
+        assert "Nothing new this week." in out.read_text(encoding="utf-8")
+
+    def test_a_repo_that_cant_be_cloned_fails_the_run(self, monkeypatch, tmp_path):
+        self.stub(monkeypatch, list_repos=lambda org: ["swimblocks/x"], clone=self.fail)
+        out = tmp_path / "summary.md"
+        assert calibrate.main(self.ARGS + ["--summary-file", str(out)]) == 1
+        assert "`swimblocks/x` couldn't be cloned" in out.read_text(encoding="utf-8")
+
+    def test_the_summary_is_written_when_github_fails(self, monkeypatch, tmp_path):
+        self.stub(monkeypatch, list_repos=self.fail)
+        out = tmp_path / "summary.md"
+        assert calibrate.main(self.ARGS + ["--summary-file", str(out)]) == 1
+        text = out.read_text(encoding="utf-8")
+        assert "## Failures" in text and "HTTP 502" in text
+
+    def test_nothing_is_posted_when_the_issues_cant_be_listed(self, monkeypatch):
+        posted = []
+        self.stub(monkeypatch, list_issues=self.fail)
+        monkeypatch.setattr(calibrate, "carry_out", lambda *a: posted.append(a))
+        assert calibrate.main(self.ARGS) == 1
+        assert posted == []
