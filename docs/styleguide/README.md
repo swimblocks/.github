@@ -45,5 +45,5 @@ input, what came back and what was wanted.
 A point raised in review more than once gets written down here. A point that review keeps
 rejecting gets reworded or removed; one that is mechanical enough for a linter becomes the
 linter's job and leaves this guide. Either way, it's an ordinary issue and pull request against
-this directory. The planned calibration report
-([design 0007](../design/0007-review-standard.md#calibration-report)) will supply the evidence.
+this directory. The weekly calibration report
+([design 0007](../design/0007-review-standard.md#calibration-report)) supplies the evidence.

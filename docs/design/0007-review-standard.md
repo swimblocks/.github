@@ -333,6 +333,8 @@ requests already record:
   `gocritic` rule, or writing the configuration for one of the linters that needs it — a
   recurring "don't import X" is what `depguard` is for. That is how the org finds out it has a
   use for those.
+  The run summary gives the week's findings; a point's case is made from every finding since
+  the review began, so it builds up over the weeks rather than starting again each Monday.
 
 **One issue per observation.** Each flag above becomes its own issue, opened the
 first week it appears — "bodyclose suppressed 11 times", "go.md *Errors* rejected 4 of 5

@@ -213,8 +213,8 @@ agreement.
   **A finding that is wrong in context is suppressed on its line, with the reason** —
   `//nolint:bodyclose // the call owns the response and closes it in close()` — not by
   switching the linter off. `nolintlint` rejects a suppression that names no linter or gives no
-  reason, so every suppression records a judgement. The planned weekly calibration report
-  ([design 0007](docs/design/0007-review-standard.md#calibration-report)) will read them to
+  reason, so every suppression records a judgement. The weekly calibration report
+  ([design 0007](docs/design/0007-review-standard.md#calibration-report)) reads them to
   suggest changes to this list.
 
   Run `golangci-lint run` (and `golangci-lint run --fix` to auto-fix) before pushing.
@@ -273,9 +273,9 @@ Google Cloud over OIDC, and the two secrets that say where to find it are copied
 by the settings rollout ([`docs/reconciler.md`](docs/reconciler.md)).
 
 Answer every finding: change the code, or reply saying why not, then resolve the thread.
-A finding you reject is as useful as one you accept: the planned calibration report
-([design 0007](docs/design/0007-review-standard.md#calibration-report)) will count both, to
-reword the guide or move a point into lint.
+A finding you reject is as useful as one you accept: the weekly calibration report
+([design 0007](docs/design/0007-review-standard.md#calibration-report)) counts both, to
+reword the guide or move a point into lint. Your reply is its record of why.
 
 ## Dependencies
 
