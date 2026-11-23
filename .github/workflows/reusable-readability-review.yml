@@ -79,10 +79,11 @@ jobs:
           echo "done=$([ "$found" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
       # The pull request's code, at the workspace root where Claude Code Action expects a
-      # checkout: the action replaces its root CLAUDE.md, AGENTS.md, .claude/ and .mcp.json
-      # with the base branch's before Claude starts, so the pull request can't configure the
-      # review. Its full history, so the diff from the base can be taken here, and no token
-      # left behind, as nothing later fetches or pushes.
+      # checkout: the action replaces the root's Claude config (CLAUDE.md, CLAUDE.local.md,
+      # AGENTS.md, .claude/, .mcp.json and the like) with the base branch's before Claude
+      # starts, so the pull request can't configure the review. Its full history, so the diff
+      # from the base can be taken here, and no token left behind: the action fetches the
+      # base branch with credentials of its own.
       - name: Check out the pull request
         if: steps.reviewed.outputs.done == 'false'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -159,7 +160,8 @@ jobs:
       # the allow list doesn't name, Bash is denied outright, and writes are allowed to the
       # summary alone. Reads need no allow rule inside the working directory and get none
       # outside it; the settings refuse them there in any mode, and deny /proc and the
-      # runner's temporary files besides. .git is unreadable too.
+      # runner's temporary files besides. .git is unreadable too: the action writes its own
+      # token into .git/config's remote URL.
       - name: Review
         if: steps.guides.outputs.list != ''
         uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
