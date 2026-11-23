@@ -79,6 +79,9 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ steps.version.outputs.tag }}
+          # The values of settings.yml's actions_secrets, copied into every repo.
+          SWIMBLOCKS_CI_WIF_PROVIDER: ${{ secrets.SWIMBLOCKS_CI_WIF_PROVIDER }}
+          SWIMBLOCKS_CI_REVIEW_SECRET: ${{ secrets.SWIMBLOCKS_CI_REVIEW_SECRET }}
         run: |
           set -euo pipefail
           repos=$(gh repo list swimblocks --limit 200 --json nameWithOwner --jq '.[].nameWithOwner')
@@ -89,8 +92,15 @@ jobs:
           # One repo's failure must not strand the rest: apply_settings.py
           # accumulates failures and exits non-zero at the end, so the run still
           # goes red without stopping at the first bad repo.
+          # A release cut before the secrets were copied doesn't know --require-secrets, and
+          # rolling one out must still work.
+          require=""
+          if python scripts/apply_settings.py --help | grep -q -- --require-secrets; then
+            require=--require-secrets
+          fi
           # shellcheck disable=SC2086
           python scripts/apply_settings.py \
             --version "$TAG" \
+            $require \
             --summary-file "$GITHUB_STEP_SUMMARY" \
             $repos

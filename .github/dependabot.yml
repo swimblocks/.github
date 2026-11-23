@@ -1,0 +1,8 @@
+# Actions pinned to a commit get their updates as pull requests, read before they change a
+# workflow (the readability review pins the ones that handle its credential).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

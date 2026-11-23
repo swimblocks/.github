@@ -298,3 +298,56 @@ class TestSetSettingsVersion:
         out = capsys.readouterr().out
         assert "FAIL settings_version" in out
         assert "(HTTP 422)" in out
+
+
+class TestSecretValues:
+    def test_takes_each_listed_value_from_the_environment(self):
+        values, missing = apply_settings.secret_values(
+            [{"name": "A"}, {"name": "B"}], {"A": "1", "B": "2", "C": "3"}
+        )
+        assert values == {"A": "1", "B": "2"}
+        assert missing == []
+
+    def test_reports_names_without_a_value(self):
+        values, missing = apply_settings.secret_values(
+            [{"name": "A"}, {"name": "B"}], {"A": "1"}
+        )
+        assert values == {"A": "1"}
+        assert missing == ["B"]
+
+    def test_empty_value_counts_as_missing(self):
+        # An unset Actions secret reaches the environment as an empty string.
+        values, missing = apply_settings.secret_values([{"name": "A"}], {"A": ""})
+        assert values == {}
+        assert missing == ["A"]
+
+    def test_entries_without_a_name_are_ignored(self):
+        assert apply_settings.secret_values([{}], {}) == ({}, [])
+
+
+class TestApplySecrets:
+    def test_value_goes_on_stdin_not_argv(self, monkeypatch):
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append((cmd, kwargs))
+            return subprocess.CompletedProcess(cmd, 0)
+
+        monkeypatch.setattr(apply_settings.subprocess, "run", fake_run)
+        assert apply_settings.apply_secrets("swimblocks/x", {"A": "s3cret"})
+        cmd, kwargs = calls[0]
+        assert "s3cret" not in cmd
+        assert kwargs["input"] == "s3cret"
+        assert cmd[:3] == ["gh", "secret", "set"]
+
+    def test_failure_is_reported_without_the_value(self, monkeypatch, capsys):
+        def fake_run(cmd, **kwargs):
+            raise subprocess.CalledProcessError(
+                1, cmd, stderr="gh: Forbidden (HTTP 403)"
+            )
+
+        monkeypatch.setattr(apply_settings.subprocess, "run", fake_run)
+        assert not apply_settings.apply_secrets("swimblocks/x", {"A": "s3cret"})
+        out = capsys.readouterr().out
+        assert "HTTP 403" in out
+        assert "s3cret" not in out
