@@ -50,6 +50,10 @@ grant belongs on the other's installation:
 | `swimblocks-reconciler` | `rollout.yml` | **All repositories** in the org | Metadata read; Administration read & write; Issues read & write; Custom properties read & write; Secrets read & write | `APP_ID`, `APP_PRIVATE_KEY` |
 | `swimblocks-releaser` | `release.yml` | **`swimblocks/.github` only** | Metadata read; Contents read & write | `RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY` |
 
+One more App, `swimblocks-calibrator`, runs the weekly calibration report (design 0007) from
+`swimblocks/.github-private`, which holds its secrets. Its setup is in that repo's
+`docs/calibrator.md`.
+
 The reconciler's permissions are what the script's API calls require, one to one:
 
 | Permission | Grants | Used for |
