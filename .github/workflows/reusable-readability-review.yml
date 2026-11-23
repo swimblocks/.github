@@ -57,8 +57,9 @@ jobs:
     concurrency:
       group: readability-review-${{ github.repository }}-${{ github.event.pull_request.number }}
       cancel-in-progress: false
+    # GH_TOKEN is given only to the steps that call the API, so it isn't in Claude's
+    # environment.
     env:
-      GH_TOKEN: ${{ github.token }}
       PR: ${{ github.event.pull_request.number }}
       # One base and head for every input, so a push during the run can't mix two versions.
       BASE: ${{ github.event.pull_request.base.sha }}
@@ -69,6 +70,8 @@ jobs:
     steps:
       - name: Already reviewed?
         id: reviewed
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           found=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq "[.[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$MARKER\")))] | length" \
@@ -78,13 +81,15 @@ jobs:
       # The pull request's code, at the workspace root where Claude Code Action expects a
       # checkout: the action replaces its root CLAUDE.md, AGENTS.md, .claude/ and .mcp.json
       # with the base branch's before Claude starts, so the pull request can't configure the
-      # review. Its full history, so the diff from the base can be taken here.
+      # review. Its full history, so the diff from the base can be taken here, and no token
+      # left behind, as nothing later fetches or pushes.
       - name: Check out the pull request
         if: steps.reviewed.outputs.done == 'false'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.HEAD }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Which style guides apply
         id: guides
@@ -108,9 +113,17 @@ jobs:
           sparse-checkout: docs/styleguide
           persist-credentials: false
 
+      # What the pull request carries that could steer the review or reach past the checkout
+      # goes first. The action restores only the root's Claude config, so deeper copies are
+      # deleted; a symbolic link could lead a read anywhere; and a .readability-review/ of its
+      # own would stand in for the style guide or the summary. The diff still shows them all.
       - name: Prepare the review
         if: steps.guides.outputs.list != ''
         run: |
+          find . -path ./.git -prune -o -type l -exec rm -f {} +
+          find . -path ./.git -prune -o -path './*/*' \( -name CLAUDE.md -o -name CLAUDE.local.md \
+            -o -name AGENTS.md -o -name .claude -o -name .mcp.json \) -prune -exec rm -rf {} +
+          rm -rf "$WORK"
           mkdir "$WORK"
           cp .styleguide-repo/docs/styleguide/README.md "$WORK/README.md"
           for g in ${{ steps.guides.outputs.list }}; do
@@ -139,12 +152,14 @@ jobs:
         if: steps.guides.outputs.list != ''
         run: rm -f "$GOOGLE_APPLICATION_CREDENTIALS"
 
-      # Claude gets no shell: only reading files, writing its summary, and posting inline
-      # comments. A command line could expand the environment, which holds the token, into a
-      # comment. The action, the model and the permission mode are all named here, so a new
-      # default upstream can't change the review: dontAsk denies whatever the allow list
-      # doesn't name, Bash is denied outright, and writes are allowed to the summary alone.
-      # .git is unreadable, as the checkout keeps its token in .git/config.
+      # Claude gets no shell: only reading files in the checkout, writing its summary, and
+      # posting inline comments. A command line, or a read of /proc/self/environ, could put
+      # the model token into a comment. The action, the model and the permission mode are all
+      # named here, so a new default upstream can't change the review: dontAsk denies whatever
+      # the allow list doesn't name, Bash is denied outright, and writes are allowed to the
+      # summary alone. Reads need no allow rule inside the working directory and get none
+      # outside it; the settings refuse them there in any mode, and deny /proc and the
+      # runner's temporary files besides. .git is unreadable too.
       - name: Review
         if: steps.guides.outputs.list != ''
         uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
@@ -181,18 +196,27 @@ jobs:
 
             Last, whatever you found, write .readability-review/summary.md: a sentence or two
             saying how many findings you posted, or that you found none. It is posted for you.
+          settings: |
+            {
+              "permissions": {
+                "blockReadsOutsideWorkingDirectories": true,
+                "deny": ["Read(//proc/**)", "Read(/${{ runner.temp }}/**)"]
+              }
+            }
           # An Edit rule is what limits a path for every file-writing tool, Write included.
           claude_args: |
             --model claude-opus-5-5
             --permission-mode dontAsk
             --max-turns 40
-            --allowedTools "Read,Glob,Grep,Edit(./.readability-review/summary.md),mcp__github_inline_comment__create_inline_comment"
+            --allowedTools "Edit(./.readability-review/summary.md),mcp__github_inline_comment__create_inline_comment"
             --disallowedTools "Bash,Read(./.git/**)"
 
       # The summary marks the pull request as reviewed, so a review that didn't finish
       # leaves no summary and fails the check.
       - name: Post the summary
         if: steps.guides.outputs.list != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ ! -s "$WORK/summary.md" ]; then
             echo "::error::The review didn't write its summary, so it didn't finish. Re-run this job."
