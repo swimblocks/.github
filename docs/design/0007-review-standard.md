@@ -226,10 +226,14 @@ each finding as an inline comment.
 - **What it's given:** the diff, and the style guide for the languages the diff touches —
   `docs/styleguide/README.md` plus `go.md` for `.go` files, `python.md` for `.py` files —
   checked out from this repo. The pull request's code is checked out too, so a name or an API
-  can be judged in its file and its callers, but with its `CLAUDE.md`, `AGENTS.md` and
-  `.claude/` removed: the review gets the style guide and the change, not the repo's own context.
+  can be judged in its file and its callers. The review doesn't need the repo's own context but
+  may read it: Claude Code Action replaces the root `CLAUDE.md`, `AGENTS.md`, `.claude/` and
+  `.mcp.json` with the base branch's, so what it reads has been reviewed, and the pull request
+  can't configure its own review.
   Claude gets no shell: its tools are reading files, writing its summary to a file, and posting
-  inline comments. A shell command could expand the environment, which holds the model token,
+  inline comments, and the permission mode denies anything else. The action, the model and the
+  permission mode are pinned, so an upstream change of default reaches the review only through
+  a Dependabot pull request. A shell command could expand the environment, which holds the model token,
   into a comment that text planted in the pull request asked for.
 - **What it's told:** readability only — not correctness, security or design. Nothing a linter
   enforces. Each comment names the style-guide point it applies, in a fixed form the calibration

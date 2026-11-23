@@ -92,9 +92,15 @@ jobs:
           # One repo's failure must not strand the rest: apply_settings.py
           # accumulates failures and exits non-zero at the end, so the run still
           # goes red without stopping at the first bad repo.
+          # A release cut before the secrets were copied doesn't know --require-secrets, and
+          # rolling one out must still work.
+          require=""
+          if python scripts/apply_settings.py --help | grep -q -- --require-secrets; then
+            require=--require-secrets
+          fi
           # shellcheck disable=SC2086
           python scripts/apply_settings.py \
             --version "$TAG" \
-            --require-secrets \
+            $require \
             --summary-file "$GITHUB_STEP_SUMMARY" \
             $repos

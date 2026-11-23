@@ -60,7 +60,12 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       PR: ${{ github.event.pull_request.number }}
+      # One base and head for every input, so a push during the run can't mix two versions.
+      BASE: ${{ github.event.pull_request.base.sha }}
+      HEAD: ${{ github.event.pull_request.head.sha }}
       MARKER: "<!-- swimblocks-readability-review -->"
+      # The review's own files, beside the pull request's code in the workspace.
+      WORK: .readability-review
     steps:
       - name: Already reviewed?
         id: reviewed
@@ -70,11 +75,22 @@ jobs:
             | awk '{s += $1} END {print s + 0}')
           echo "done=$([ "$found" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
+      # The pull request's code, at the workspace root where Claude Code Action expects a
+      # checkout: the action replaces its root CLAUDE.md, AGENTS.md, .claude/ and .mcp.json
+      # with the base branch's before Claude starts, so the pull request can't configure the
+      # review. Its full history, so the diff from the base can be taken here.
+      - name: Check out the pull request
+        if: steps.reviewed.outputs.done == 'false'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD }}
+          fetch-depth: 0
+
       - name: Which style guides apply
         id: guides
         if: steps.reviewed.outputs.done == 'false'
         run: |
-          files=$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only)
+          files=$(git diff --name-only "$BASE...$HEAD")
           guides=""
           grep -qE '\.go$' <<<"$files" && guides="$guides go.md"
           grep -qE '\.py$' <<<"$files" && guides="$guides python.md"
@@ -84,49 +100,36 @@ jobs:
       # The style guide comes from the org repo's main branch, as callers pin this workflow @main.
       - name: Check out the style guide
         if: steps.guides.outputs.list != ''
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: swimblocks/.github
           ref: main
-          path: styleguide-repo
+          path: .styleguide-repo
           sparse-checkout: docs/styleguide
-
-      # The pull request's code, so a name or API can be judged in its file and its callers.
-      # Its agent instructions are removed: the review is given the style guide and the
-      # change, not the repo's own context.
-      - name: Check out the pull request
-        if: steps.guides.outputs.list != ''
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          path: pr
           persist-credentials: false
 
       - name: Prepare the review
         if: steps.guides.outputs.list != ''
         run: |
-          find pr -name CLAUDE.md -o -name AGENTS.md -o -name CLAUDE.local.md | xargs -r rm -f
-          rm -rf pr/.claude
-          mkdir review
-          cp styleguide-repo/docs/styleguide/README.md review/README.md
+          mkdir "$WORK"
+          cp .styleguide-repo/docs/styleguide/README.md "$WORK/README.md"
           for g in ${{ steps.guides.outputs.list }}; do
-            cp "styleguide-repo/docs/styleguide/$g" "review/$g"
+            cp ".styleguide-repo/docs/styleguide/$g" "$WORK/$g"
           done
-          gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" > review/changes.diff
-          # A sparse checkout still includes the repo's root files, its CLAUDE.md among them.
-          rm -rf styleguide-repo
+          git diff "$BASE...$HEAD" > "$WORK/changes.diff"
+          rm -rf .styleguide-repo
 
       - name: Sign in to Google Cloud
         if: steps.guides.outputs.list != ''
         id: gcp
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           workload_identity_provider: ${{ secrets.SWIMBLOCKS_CI_WIF_PROVIDER }}
 
       - name: Read the model token
         if: steps.guides.outputs.list != ''
         id: model
-        uses: google-github-actions/get-secretmanager-secrets@v3
+        uses: google-github-actions/get-secretmanager-secrets@bc9c54b29fdffb8a47776820a7d26e77b379d262 # v3.0.0
         with:
           secrets: token:${{ secrets.SWIMBLOCKS_CI_REVIEW_SECRET }}/versions/latest
 
@@ -138,25 +141,29 @@ jobs:
 
       # Claude gets no shell: only reading files, writing its summary, and posting inline
       # comments. A command line could expand the environment, which holds the token, into a
-      # comment.
+      # comment. The action, the model and the permission mode are all named here, so a new
+      # default upstream can't change the review: dontAsk denies whatever the allow list
+      # doesn't name, Bash is denied outright, and writes are allowed to the summary alone.
+      # .git is unreadable, as the checkout keeps its token in .git/config.
       - name: Review
         if: steps.guides.outputs.list != ''
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
         with:
           claude_code_oauth_token: ${{ steps.model.outputs.token }}
           prompt: |
             You are reviewing pull request #${{ github.event.pull_request.number }} in
             ${{ github.repository }} for readability, and nothing else.
 
-            The style guide is in review/: README.md holds the points for every language,
+            The style guide is in .readability-review/: README.md holds the points for every language,
             and ${{ steps.guides.outputs.list }} the points for the languages this pull
             request changes. Each point's ID is its file and heading: general/names,
             go/errors. go.md and python.md also adopt Google's style guides, whose ID is
             go/google or python/google; cite the section you apply by its link.
 
-            The change is review/changes.diff. The pull request's code is checked out in pr/;
-            read a changed file, or its callers, when a name or an API can't be judged from
-            the diff alone. Review only lines the pull request changes.
+            The change is .readability-review/changes.diff. The pull request's code is checked
+            out in the working directory; read a changed file, or its callers, when a name or
+            an API can't be judged from the diff alone. Review only lines the pull request
+            changes.
 
             Rules:
             - Readability only. Do not comment on correctness, security, performance or
@@ -172,20 +179,24 @@ jobs:
             Post each finding as an inline comment on the line it concerns, with
             mcp__github_inline_comment__create_inline_comment.
 
-            Last, whatever you found, write review/summary.md: a sentence or two saying how
-            many findings you posted, or that you found none. It is posted for you.
+            Last, whatever you found, write .readability-review/summary.md: a sentence or two
+            saying how many findings you posted, or that you found none. It is posted for you.
+          # An Edit rule is what limits a path for every file-writing tool, Write included.
           claude_args: |
+            --model claude-opus-5-5
+            --permission-mode dontAsk
             --max-turns 40
-            --allowedTools "Read,Glob,Grep,Write,mcp__github_inline_comment__create_inline_comment"
+            --allowedTools "Read,Glob,Grep,Edit(./.readability-review/summary.md),mcp__github_inline_comment__create_inline_comment"
+            --disallowedTools "Bash,Read(./.git/**)"
 
       # The summary marks the pull request as reviewed, so a review that didn't finish
       # leaves no summary and fails the check.
       - name: Post the summary
         if: steps.guides.outputs.list != ''
         run: |
-          if [ ! -s review/summary.md ]; then
+          if [ ! -s "$WORK/summary.md" ]; then
             echo "::error::The review didn't write its summary, so it didn't finish. Re-run this job."
             exit 1
           fi
-          { echo "$MARKER"; echo "**Readability review** ([style guide](https://github.com/swimblocks/.github/tree/main/docs/styleguide))"; echo; cat review/summary.md; } > review/comment.md
-          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file review/comment.md
+          { echo "$MARKER"; echo "**Readability review** ([style guide](https://github.com/swimblocks/.github/tree/main/docs/styleguide))"; echo; cat "$WORK/summary.md"; } > "$WORK/comment.md"
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file "$WORK/comment.md"
