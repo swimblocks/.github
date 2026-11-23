@@ -438,9 +438,12 @@ class TestPlan:
 class TestCarryOut:
     def test_the_state_is_saved_only_after_the_comment_and_reopen(self, monkeypatch):
         calls = []
-        monkeypatch.setattr(
-            calibrate, "gh", lambda *args, stdin=None: calls.append((args, stdin)) or ""
-        )
+
+        def gh(*args, stdin=None):
+            calls.append((args, stdin))
+            return ""
+
+        monkeypatch.setattr(calibrate, "gh", gh)
         obs = observation(evidence={"b": "line b"})
         action = calibrate.Action("reopen", obs, 7, ["line b"], {"a"})
         calibrate.carry_out("swimblocks/.github-private", action)

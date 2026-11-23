@@ -37,6 +37,7 @@ import subprocess
 import sys
 import tempfile
 from collections import defaultdict
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -137,7 +138,7 @@ def listed(lines: list[str]) -> str:
     return shown + (f"\n- and {more} more" if more > 0 else "")
 
 
-def issue_body(obs: Observation, seen: set[str] = frozenset()) -> str:
+def issue_body(obs: Observation, seen: Iterable[str] = ()) -> str:
     """The issue for *obs*, its hidden state listing this week's evidence and *seen*.
 
     Evidence that goes away and comes back has been listed before, so it isn't new.
@@ -203,7 +204,7 @@ def update_comment(action: Action) -> str:
     )
 
 
-def where(links: dict[str, str], repo: str, path: str, line: int) -> str:
+def line_link(links: dict[str, str], repo: str, path: str, line: int) -> str:
     """A markdown link to one line of a cloned repo, labelled with where it is."""
     return f"`{repo}` [{path}:{line}]({links[repo]}/{path}#L{line})"
 
@@ -260,7 +261,7 @@ def suppression_observations(
     for linter, group in sorted(by_linter.items()):
         ids = evidence_ids([(s.repo, s.path, s.linter, s.reason) for s in group])
         lines = {
-            eid: f"{where(links, s.repo, s.path, s.line)}: {why}"
+            eid: f"{line_link(links, s.repo, s.path, s.line)}: {why}"
             for eid, s, why in zip(ids, group, reasons(group))
         }
         statement = (
@@ -339,7 +340,7 @@ def disabled_observations(
     linters: set[str],
     found: list[LintFinding],
     links: dict[str, str],
-    partial: set[str] = frozenset(),
+    partial: Collection[str] = frozenset(),
 ) -> list[Observation]:
     """A case per disabled linter: switched on, it would report only a few findings.
 
@@ -354,11 +355,11 @@ def disabled_observations(
         group = by_linter.get(linter, [])
         ids = evidence_ids([(f.repo, f.path, f.linter, f.text) for f in group])
         lines = {
-            eid: f"{where(links, f.repo, f.path, f.line)}: {quoted(f.text)}"
+            eid: f"{line_link(links, f.repo, f.path, f.line)}: {quoted(f.text)}"
             for eid, f in zip(ids, group)
         }
         sample = "\n".join(
-            f"- {where(links, f.repo, f.path, f.line)}: {quoted(f.text)}"
+            f"- {line_link(links, f.repo, f.path, f.line)}: {quoted(f.text)}"
             + (f"\n  ```go\n  {f.source}\n  ```" if f.source else "")
             for f in group[:SAMPLE_SIZE]
         )
@@ -396,7 +397,9 @@ def disabled_observations(
 # ---------------------------------------------------------------------------
 
 UNCITED = "uncited"  # the point of a finding that names none
-UNAVAILABLE: dict = {}  # a compare GitHub couldn't produce
+# Stands in for a compare GitHub couldn't produce, as when the commit was force-pushed
+# away; a finding against it has an unknown outcome.
+UNAVAILABLE = object()
 
 POINT = re.compile(r"^\s*\[([a-z]+/[a-z-]+)\]")
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@")
@@ -434,7 +437,8 @@ def touched_old_lines(patch: str) -> set[int]:
         hunk = HUNK.match(text)
         if hunk:
             # `-N,0` is an insertion after old line N; any other hunk starts at N.
-            old = int(hunk.group(1)) + (hunk.group(2) == "0")
+            start = int(hunk.group(1))
+            old = start + 1 if hunk.group(2) == "0" else start
             replacing = False
         elif old is None or text.startswith("\\"):
             continue
@@ -618,7 +622,9 @@ def merged_prs(org: str, since: str) -> list[tuple[str, int]]:
     return [("/".join(item["url"].split("/")[-2:]), item["number"]) for item in items]
 
 
-def compare_commits(repo: str, base: str, head: str) -> dict | None:
+def compare_commits(repo: str, base: str, head: str) -> dict | None | object:
+    """GitHub's compare of *base* with *head*, None if they're the same commit, or
+    UNAVAILABLE if GitHub can't produce one."""
     if base == head:
         return None
     try:
@@ -637,7 +643,7 @@ def pr_findings(repo: str, number: int) -> list[Finding]:
     for c in comments:
         if c.get("in_reply_to_id") and c["user"]["type"] != "Bot":
             replies[c["in_reply_to_id"]].append(" ".join(c["body"].split()))
-    compares: dict[str, dict | None] = {}
+    compares: dict[str, dict | None | object] = {}
     found = []
     for c in comments:
         if c["user"]["login"] != REVIEWER or c.get("in_reply_to_id"):
@@ -706,7 +712,7 @@ def summary(
     week: list[Finding],
     results: list[str],
     notes: list[str],
-    failures: list[str] = (),
+    failures: Sequence[str] = (),
 ) -> str:
     """Every week's numbers, flagged or not, for the workflow run's summary."""
     lines = ["# Calibration report", ""]
@@ -723,7 +729,12 @@ def summary(
         ]
         for o in observations:
             if o.key.endswith(suffix):
-                flagged = "incomplete" if o.partial else "yes" if o.flagged else ""
+                if o.partial:
+                    flagged = "incomplete"
+                elif o.flagged:
+                    flagged = "yes"
+                else:
+                    flagged = ""
                 lines.append(f"| `{o.key.split(':')[1]}` | {o.count} | {flagged} |")
         lines.append("")
     lines += ["## Readability findings on pull requests merged this week", ""]
@@ -802,51 +813,66 @@ def error_text(exc: Exception) -> str:
     return str(exc)[-300:]
 
 
-def collect(opts: argparse.Namespace, run: Run) -> None:
-    """Gather the week's evidence into *run*'s observations."""
-    suppressions: list[Suppression] = []
-    lint_findings: list[LintFinding] = []
-    off: set[str] = set()
-    partial: set[str] = set()
-    links: dict[str, str] = {}
+@dataclass
+class LintEvidence:
+    """What the org's Go repos record about the lint set."""
 
+    suppressions: list[Suppression] = field(default_factory=list)
+    findings: list[LintFinding] = field(default_factory=list)
+    # Every linter some repo disables, and those whose run failed somewhere.
+    disabled: set[str] = field(default_factory=set)
+    partial: set[str] = field(default_factory=set)
+    # Repo -> the base URL of its files at the commit read.
+    links: dict[str, str] = field(default_factory=dict)
+
+
+def read_repo(
+    repo: str, path: Path, skip_lint: bool, lint: LintEvidence, run: Run
+) -> None:
+    """Add one cloned repo's suppressions and disabled linters' findings to *lint*."""
+    if not (path / "go.mod").exists():
+        return
+    print(f"{repo}: Go")
+    lint.suppressions += find_suppressions(repo, path)
+    if skip_lint:
+        return
+    config = path / ".golangci.yml"
+    if not config.exists():
+        run.notes.append(f"`{repo}` has no `.golangci.yml`, so nothing was run in it.")
+        return
+    linters = disabled_linters(config.read_text(encoding="utf-8"))
+    if not linters:
+        run.notes.append(f"`{repo}`'s `.golangci.yml` disables no linter by name.")
+        return
+    lint.disabled.update(linters)
+    try:
+        lint.findings += run_disabled_linters(repo, path, linters)
+    except RuntimeError as exc:
+        lint.partial.update(linters)
+        run.failures.append(str(exc))
+
+
+def read_repos(org: str, skip_lint: bool, run: Run) -> LintEvidence:
+    """The lint evidence in every repo in *org*."""
+    lint = LintEvidence()
     with tempfile.TemporaryDirectory() as tmp:
-        for repo in list_repos(opts.org):
+        for repo in list_repos(org):
             try:
-                path, links[repo] = clone(repo, Path(tmp))
+                path, lint.links[repo] = clone(repo, Path(tmp))
             except subprocess.CalledProcessError as exc:
                 run.failures.append(
                     f"`{repo}` couldn't be cloned, so it was left out: "
                     f"{error_text(exc)}"
                 )
                 continue
-            if not (path / "go.mod").exists():
-                continue
-            print(f"{repo}: Go")
-            suppressions += find_suppressions(repo, path)
-            if opts.skip_lint:
-                continue
-            config = path / ".golangci.yml"
-            if not config.exists():
-                run.notes.append(
-                    f"`{repo}` has no `.golangci.yml`, so nothing was run in it."
-                )
-                continue
-            linters = disabled_linters(config.read_text(encoding="utf-8"))
-            if not linters:
-                run.notes.append(
-                    f"`{repo}`'s `.golangci.yml` disables no linter by name."
-                )
-                continue
-            off.update(linters)
-            try:
-                lint_findings += run_disabled_linters(repo, path, linters)
-            except RuntimeError as exc:
-                partial.update(linters)
-                run.failures.append(str(exc))
+            read_repo(repo, path, skip_lint, lint, run)
+    return lint
 
+
+def read_reviews(org: str, since: str, run: Run) -> list[Finding]:
+    """The review's findings on *org*'s pull requests merged since *since*."""
     findings: list[Finding] = []
-    for repo, number in merged_prs(opts.org, opts.since):
+    for repo, number in merged_prs(org, since):
         try:
             findings += pr_findings(repo, number)
         except subprocess.CalledProcessError as exc:
@@ -854,7 +880,6 @@ def collect(opts: argparse.Namespace, run: Run) -> None:
                 f"{repo}#{number}'s review findings couldn't be read, so they aren't "
                 f"counted: {error_text(exc)}"
             )
-    run.week = [f for f in findings if f.merged > opts.today - timedelta(days=7)]
     unknown = sum(f.outcome == "unknown" for f in findings)
     if unknown:
         run.notes.append(f"{unknown} readability finding(s) couldn't be matched to "
@@ -862,10 +887,17 @@ def collect(opts: argparse.Namespace, run: Run) -> None:
     uncited = sum(f.point == UNCITED for f in findings)
     if uncited:
         run.notes.append(f"{uncited} readability finding(s) cite no style-guide point.")
+    return findings
 
+
+def collect(opts: argparse.Namespace, run: Run) -> None:
+    """Gather the week's evidence into *run*'s observations."""
+    lint = read_repos(opts.org, opts.skip_lint, run)
+    findings = read_reviews(opts.org, opts.since, run)
+    run.week = [f for f in findings if f.merged > opts.today - timedelta(days=7)]
     run.observations = (
-        suppression_observations(suppressions, links)
-        + disabled_observations(off, lint_findings, links, partial)
+        suppression_observations(lint.suppressions, lint.links)
+        + disabled_observations(lint.disabled, lint.findings, lint.links, lint.partial)
         + style_observations(findings)
     )
 
