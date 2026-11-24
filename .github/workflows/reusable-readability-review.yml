@@ -78,6 +78,25 @@ jobs:
             | awk '{s += $1} END {print s + 0}')
           echo "done=$([ "$found" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
+      # The style guide comes from the org repo's main branch, as callers pin this workflow @main.
+      # It is checked out, and moved to the runner's temporary files, before the pull request is,
+      # so nothing the pull request carries can stand in for it.
+      - name: Check out the style guide
+        if: steps.reviewed.outputs.done == 'false'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: swimblocks/.github
+          ref: main
+          path: .styleguide-repo
+          sparse-checkout: docs/styleguide
+          persist-credentials: false
+
+      - name: Keep the style guide outside the workspace
+        if: steps.reviewed.outputs.done == 'false'
+        run: |
+          mv .styleguide-repo/docs/styleguide "$RUNNER_TEMP/styleguide"
+          rm -rf .styleguide-repo
+
       # The pull request's code, at the workspace root where Claude Code Action expects a
       # checkout: the action replaces the root's Claude config (CLAUDE.md, CLAUDE.local.md,
       # AGENTS.md, .claude/, .mcp.json and the like) with the base branch's before Claude
@@ -103,21 +122,13 @@ jobs:
           echo "list=${guides# }" >> "$GITHUB_OUTPUT"
           [ -n "$guides" ] || echo "No Go or Python changes; nothing to review." >> "$GITHUB_STEP_SUMMARY"
 
-      # The style guide comes from the org repo's main branch, as callers pin this workflow @main.
-      - name: Check out the style guide
-        if: steps.guides.outputs.list != ''
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: swimblocks/.github
-          ref: main
-          path: .styleguide-repo
-          sparse-checkout: docs/styleguide
-          persist-credentials: false
-
       # What the pull request carries that could steer the review or reach past the checkout
       # goes first. The action restores only the root's Claude config, so deeper copies are
       # deleted; a symbolic link could lead a read anywhere; and a .readability-review/ of its
       # own would stand in for the style guide or the summary. The diff still shows them all.
+      # Then the repository's .git moves to the runner's temporary files, leaving a file that
+      # points git to it: the action writes its own token into the remote URL in .git/config,
+      # and the review's searches can't be relied on to honour a rule against reading .git.
       - name: Prepare the review
         if: steps.guides.outputs.list != ''
         run: |
@@ -126,12 +137,13 @@ jobs:
             -o -name AGENTS.md -o -name .claude -o -name .mcp.json \) -prune -exec rm -rf {} +
           rm -rf "$WORK"
           mkdir "$WORK"
-          cp .styleguide-repo/docs/styleguide/README.md "$WORK/README.md"
+          cp "$RUNNER_TEMP/styleguide/README.md" "$WORK/README.md"
           for g in ${{ steps.guides.outputs.list }}; do
-            cp ".styleguide-repo/docs/styleguide/$g" "$WORK/$g"
+            cp "$RUNNER_TEMP/styleguide/$g" "$WORK/$g"
           done
           git diff "$BASE...$HEAD" > "$WORK/changes.diff"
-          rm -rf .styleguide-repo
+          mv .git "$RUNNER_TEMP/pr.git"
+          echo "gitdir: $RUNNER_TEMP/pr.git" > .git
 
       - name: Sign in to Google Cloud
         if: steps.guides.outputs.list != ''
@@ -160,8 +172,8 @@ jobs:
       # the allow list doesn't name, Bash is denied outright, and writes are allowed to the
       # summary alone. Reads need no allow rule inside the working directory and get none
       # outside it; the settings refuse them there in any mode, and deny /proc and the
-      # runner's temporary files besides. .git is unreadable too: the action writes its own
-      # token into .git/config's remote URL.
+      # runner's temporary files besides, where the repository's .git now is. Reading ./.git
+      # stays denied as well, as a second guard.
       - name: Review
         if: steps.guides.outputs.list != ''
         uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
