@@ -213,7 +213,9 @@ agreement.
   **A finding that is wrong in context is suppressed on its line, with the reason** —
   `//nolint:bodyclose // the call owns the response and closes it in close()` — not by
   switching the linter off. `nolintlint` rejects a suppression that names no linter or gives no
-  reason, so every suppression records a judgement. The weekly calibration report
+  reason, so every suppression records a judgement. How to answer the findings that take
+  judgement, and when suppressing is right: [Go style guide](docs/styleguide/go.md#lint-findings).
+  The weekly calibration report
   ([design 0007](docs/design/0007-review-standard.md#calibration-report)) reads them to
   suggest changes to this list.
 
