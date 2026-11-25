@@ -50,13 +50,14 @@ the pull request must not be able to reach. The workflow's comments give the det
 
 ## Operating it
 
-**Adding it to an existing repo.** Open a pull request adding a copy of the template. That
-pull request's own review check fails: Claude Code Action runs only once the caller is on the
-default branch (see Troubleshooting). Merge it anyway; the next pull request is reviewed.
+**Adding it to an existing repo.** Open a pull request adding a copy of the template, and
+nothing else. It changes nothing the style guide covers, so it passes without a review. A pull
+request that adds the caller alongside other changes gets a failing review check instead:
+Claude Code Action runs only once the caller is on the default branch (see Troubleshooting).
 
-**Re-running.** A re-run uses the version of the reusable workflow its run first started with,
-not the current `main`. To pick up a change to the reusable workflow, push a new commit to the
-pull request instead: an empty one works (`git commit --allow-empty`).
+**Re-running.** **Re-run all jobs** (`gh run rerun <run>`) uses the reusable workflow as it is
+on `main` now. **Re-run failed jobs**, or a single job (`gh run rerun --failed`), uses it as it
+was when the run first started, so it won't pick up a fix to the reusable workflow.
 
 **Reviewing a pull request again.** The summary comment is what marks a pull request reviewed.
 Delete it, and the next push reviews the pull request again, as it then stands.
@@ -72,8 +73,8 @@ review findings were answered, and suggests changes to the lint set and the styl
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| The Review step warns `Workflow validation failed. The workflow file must exist and have identical content to the version on the repository's default branch`, then the run fails with `The review didn't write its summary` | The pull request adds or changes the caller, which Claude Code Action won't run until it is on the default branch | Expected on that pull request. Merge it; the next one is reviewed. |
-| A re-run fails the same way after the reusable workflow was fixed | Re-runs use the reusable workflow as it was when the run started | Push a commit (an empty one works) |
+| The Review step warns `Workflow validation failed. The workflow file must exist and have identical content to the version on the repository's default branch`, then the run fails with `The review didn't write its summary` | The pull request adds or changes the caller, and also changes what the style guide covers; Claude Code Action won't run until the caller is on the default branch | Put the caller change in a pull request of its own, merge it, then push to this one |
+| A re-run fails the same way after the reusable workflow was fixed | Re-running failed jobs uses the reusable workflow as it was when the run started | Re-run all jobs instead |
 | `SWIMBLOCKS_CI_REVIEW_SECRET isn't projects/<project>/secrets/<name>` | The secret holds something else | Set it on this repo from `terraform output -raw readability_review_secret`, then run the rollout |
 | Read the model token fails: `the caller does not have permission` | Something on the Google side refused the review's identity | Turn on data access audit logging in the devops Google Cloud project and re-run; the logs should show what refused it. Turn it off afterwards: Terraform owns the project's IAM policy. |
 | Read the model token fails: `rejected by the attribute condition` | The sign-in came from somewhere the provider doesn't admit: not this workflow, or not from `main` | Run the review from `main`; a branch of the reusable workflow can't sign in |

@@ -36,6 +36,18 @@ for arg in "$@"; do
 done
 
 REPO="swimblocks/$name"
+
+# Adding the readability review's caller below creates a file under .github/workflows, which
+# needs the token's workflow scope. Check before creating anything, so a missing scope can't
+# leave a repo created but not set up. A token that reports no scopes (fine-grained, or an
+# app's) is left to the call itself.
+scopes=$(gh api -i user 2>/dev/null | tr -d '\r' | sed -n 's/^[Xx]-[Oo][Aa]uth-[Ss]copes: //p')
+if [ -n "$scopes" ] && ! grep -qw workflow <<<"${scopes//,/ }"; then
+  echo "error: your gh token lacks the workflow scope, needed to add the readability review's" >&2
+  echo "       caller. Add it with: gh auth refresh -s workflow" >&2
+  exit 1
+fi
+
 echo "==> Creating $REPO"
 gh repo create "$REPO" $visibility_flag "$@"
 

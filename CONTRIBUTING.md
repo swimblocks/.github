@@ -252,9 +252,9 @@ own `.github/workflows/readability-review.yml`, separate from `ci.yml` because i
 different events. That file is a copy of
 [`workflow-templates/readability-review.yml`](workflow-templates/readability-review.yml).
 [`scripts/create-repo.sh`](scripts/create-repo.sh) commits it to every new repo's default branch,
-and GitHub offers it under a repo's **Actions → New workflow**. A repo that adds it by hand
-gets a failing review check on that one pull request: Claude Code Action runs only once the
-caller is on the default branch.
+and GitHub offers it under a repo's **Actions → New workflow**. Add it to an existing repo in
+a pull request of its own: Claude Code Action runs only once the caller is on the default
+branch, so a pull request that adds it alongside other changes fails its review check.
 
 A pull request is reviewed once, when it is opened or marked ready for review, against the style
 guide for the languages it changes. Findings are inline comments from the Claude GitHub App, and
