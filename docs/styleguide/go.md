@@ -35,3 +35,71 @@ Every goroutine has an owner and a visible end: whoever starts one makes clear h
 
 Table-driven where cases vary only by data. Failure messages report `got` before `want`.
 Structures are compared with `cmp.Diff`. No assertion library.
+
+## Lint findings
+
+Most findings have one fix, and `golangci-lint run --fix` applies many of them. These are the
+ones where the fix takes judgement, or where suppressing is sometimes right. A suppression names
+its linter and says why the finding doesn't apply here, in terms a reader can check:
+`//nolint:forcetypeassert // the flight's function returns only *Rules`. Rename with gopls
+(your editor's rename, or `gopls rename`), not text search.
+
+#### bodyclose
+
+Close a response where it's received, `defer resp.Body.Close()` after the
+error check. A helper that reads a body returns what callers use (status, headers, the bytes),
+not an `*http.Response` whose body it has already closed, which neither the linter nor a
+reader can follow. Suppress only where a type takes ownership of the response and closes it
+later.
+
+#### forcetypeassert
+
+Use `v, ok := x.(T)` and handle `!ok`. Where the code guarantees the type
+(an `ed25519.PrivateKey`'s `Public()`, a `singleflight` function that returns one type), make
+the assertion in one place and suppress it with that guarantee. Tests are exempt.
+
+#### noctx
+
+Pass a context to context-aware APIs: `http.NewRequestWithContext`, `net.ListenConfig`, and
+`t.Context()` in tests.
+
+#### contextcheck
+
+Pass the context there is through calls. Work that must outlive a cancelled context, such as a
+graceful shutdown, starts from `context.WithoutCancel(ctx)`, not `context.Background()`.
+
+#### containedctx
+
+Pass a context as the first parameter. A struct may hold one only when the
+struct is a single request or call; suppress there and say so.
+
+#### gochecknoglobals
+
+State becomes a field or a local, and a test global a local or a
+fixture. Parse a template where it's used. A fixed lookup table, built once and never written,
+may stay, suppressed with that reason.
+
+#### errname
+
+Rename the type to end in `Error`. An exported type that callers use as a value
+as well as an error may keep its name, suppressed with what it is.
+
+#### errchkjson
+
+Check `json.Marshal`'s error. Suppress only where the value can't fail to
+marshal, and say what it is.
+
+#### errorlint
+
+Compare errors with `errors.Is` and `errors.As`. Choosing `%v` over `%w` is
+deliberate ([Errors](#errors)); suppress it with the reason.
+
+#### gosec
+
+Each rule is a security judgement. Suppress with the rule's ID and why it doesn't
+apply: `//nolint:gosec // G304: a code generator reads the file it's told to rewrite`.
+
+#### revive
+
+A `time.Duration`'s name doesn't end in a unit; revive reads `RetryMin` as minutes,
+so `MinRetry`.
