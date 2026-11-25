@@ -45,15 +45,20 @@ for _ in 1 2 3 4 5; do
   sleep 1
 done
 
-echo "==> Applying canonical settings"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-python "$SCRIPT_DIR/apply_settings.py" "$REPO"
 
 # The readability review's caller goes in as the repo's first commit, before anyone opens a
-# pull request: Claude Code Action runs only once the caller is on the default branch.
+# pull request: Claude Code Action runs only once the caller is on the default branch. It is
+# one of settings.yml's required_files, which the settings check below then confirms.
+# Carriage returns are dropped, so a Windows checkout's copy matches the template's.
 echo "==> Adding the readability review caller"
-gh api -X PUT "repos/$REPO/contents/.github/workflows/readability-review.yml"   -f message="Call the org's readability review"   -f content="$(base64 < "$SCRIPT_DIR/../workflow-templates/readability-review.yml" | tr -d '
-')"   >/dev/null
+gh api -X PUT "repos/$REPO/contents/.github/workflows/readability-review.yml" \
+  -f message="Call the org's readability review" \
+  -f content="$(tr -d '\r' < "$SCRIPT_DIR/../workflow-templates/readability-review.yml" | base64 | tr -d '\n')" \
+  >/dev/null
+
+echo "==> Applying canonical settings"
+python "$SCRIPT_DIR/apply_settings.py" "$REPO"
 
 echo
 echo "Done. $REPO is live with org-wide defaults."
