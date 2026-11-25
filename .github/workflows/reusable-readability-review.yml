@@ -116,7 +116,7 @@ jobs:
           grep -qE '\.go$' <<<"$files" && guides="$guides go.md"
           grep -qE '\.py$' <<<"$files" && guides="$guides python.md"
           echo "list=${guides# }" >> "$GITHUB_OUTPUT"
-          [ -n "$guides" ] || echo "No Go or Python changes; nothing to review." >> "$GITHUB_STEP_SUMMARY"
+          [ -n "$guides" ] || echo "Nothing the style guide covers changed; nothing to review." >> "$GITHUB_STEP_SUMMARY"
 
       # What the pull request carries that could steer the review or reach past the checkout
       # goes first. The action restores only the root's Claude config, so deeper copies are

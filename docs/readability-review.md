@@ -9,15 +9,14 @@ caller each repo runs it from. Keep this doc current as they change; the decisio
 ## What it does
 
 Claude reviews each pull request once, against the [org style guide](styleguide/README.md) for
-the languages the pull request changes (today Go and Python), and posts each finding as an
-inline comment from the Claude GitHub App. Every finding names the point it applies, such as
-`[go/errors]`. When it's done, the workflow posts a summary comment saying how many findings
-there were.
+what the pull request changes, and posts each finding as an inline comment from the Claude
+GitHub App. Every finding names the point it applies, such as `[go/errors]`. When it's done,
+the workflow posts a summary comment saying how many findings there were.
 
 The workflow runs on every push, so its check is on the latest commit, but after the first
-review it finds the summary comment and passes without reviewing again. A pull request that
-changes no Go or Python passes without a review. Drafts, pull requests from forks and pull
-requests opened or pushed by bots (Dependabot) are skipped.
+review it finds the summary comment and passes without reviewing again. A pull request whose
+changes the style guide doesn't cover passes without a review. Drafts, pull requests from forks
+and pull requests opened or pushed by bots (Dependabot) are skipped.
 
 ## What it needs
 
@@ -33,7 +32,7 @@ The model token is a Claude Code OAuth token. To replace it, the operator runs
 `gcloud secrets versions add claude-code-oauth-token --project=<project> --data-file=-`. The
 next review reads the latest version.
 
-## What keeps the review to the change
+## Isolation
 
 A pull request is code under review, not instructions, and the review runs with a model token
 the pull request must not be able to reach. The workflow's comments give the detail. In short:
@@ -76,22 +75,8 @@ review findings were answered, and suggests changes to the lint set and the styl
 | The Review step warns `Workflow validation failed. The workflow file must exist and have identical content to the version on the repository's default branch`, then the run fails with `The review didn't write its summary` | The pull request adds or changes the caller, which Claude Code Action won't run until it is on the default branch | Expected on that pull request. Merge it; the next one is reviewed. |
 | A re-run fails the same way after the reusable workflow was fixed | Re-runs use the reusable workflow as it was when the run started | Push a commit (an empty one works) |
 | `SWIMBLOCKS_CI_REVIEW_SECRET isn't projects/<project>/secrets/<name>` | The secret holds something else | Set it on this repo from `terraform output -raw readability_review_secret`, then run the rollout |
-| Read the model token fails: `the caller does not have permission` | Something on the Google side refused the review's identity. It once was Cloud Resource Manager, asked for the project because the sign-in had none; the "Which project the token is in" step now supplies it. | Find the refusal in the audit logs (below) |
+| Read the model token fails: `the caller does not have permission` | Something on the Google side refused the review's identity | Turn on data access audit logging in the devops Google Cloud project and re-run; the logs should show what refused it. Turn it off afterwards: Terraform owns the project's IAM policy. |
 | Read the model token fails: `rejected by the attribute condition` | The sign-in came from somewhere the provider doesn't admit: not this workflow, or not from `main` | Run the review from `main`; a branch of the reusable workflow can't sign in |
 | The rollout reports `FAIL file '.github/workflows/readability-review.yml': could not read: ... (HTTP 404)` | The repo has no caller | A pull request adding it |
 | The same, with `(HTTP 403)` | The reconciler lacks Contents read | Grant it ([reconciler](reconciler.md)) |
 | The rollout reports `differs from workflow-templates/readability-review.yml` | The repo's caller was edited | A pull request restoring the template's copy, or a change to the template if every repo should have it |
-
-**Finding a Google Cloud refusal.** The devops project keeps no data access logs, so a refused
-request leaves no record by default. To see one, the operator turns them on for IAM and STS,
-re-runs the failing job, reads the log, and turns them off again:
-
-1. `gcloud projects get-iam-policy <project> --format=json > policy.json`, add
-   `"auditConfigs"` for `iam.googleapis.com` and `sts.googleapis.com` with `ADMIN_READ`,
-   `DATA_READ` and `DATA_WRITE`, and `gcloud projects set-iam-policy <project> policy.json`.
-   Changes can take a few minutes to apply.
-2. Re-run the job, then read the entries:
-   `gcloud logging read 'protoPayload.serviceName="sts.googleapis.com" OR protoPayload.serviceName="iam.googleapis.com"' --project=<project> --freshness=1h`.
-   A token exchange with an empty `status` succeeded, so the refusal came after it.
-3. Set `"auditConfigs": []` and apply the policy again. Terraform owns the project's IAM policy,
-   so the setting would otherwise show up in the next plan.
