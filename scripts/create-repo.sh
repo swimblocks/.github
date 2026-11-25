@@ -49,6 +49,12 @@ echo "==> Applying canonical settings"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python "$SCRIPT_DIR/apply_settings.py" "$REPO"
 
+# The readability review's caller goes in as the repo's first commit, before anyone opens a
+# pull request: Claude Code Action runs only once the caller is on the default branch.
+echo "==> Adding the readability review caller"
+gh api -X PUT "repos/$REPO/contents/.github/workflows/readability-review.yml"   -f message="Call the org's readability review"   -f content="$(base64 < "$SCRIPT_DIR/../workflow-templates/readability-review.yml" | tr -d '
+')"   >/dev/null
+
 echo
 echo "Done. $REPO is live with org-wide defaults."
 echo "Clone it into the standard local layout: ghq get https://github.com/$REPO"
@@ -56,8 +62,6 @@ echo "Next: add per-repo CI calling the shared workflow for the repo's language:
 echo "        Python: uses: swimblocks/.github/.github/workflows/reusable-python-ci.yml@main"
 echo "        Go:     uses: swimblocks/.github/.github/workflows/reusable-go-ci.yml@main"
 echo "      (a Go repo starts on the current stable Go release, named by go.mod's go directive),"
-echo "      add .github/workflows/readability-review.yml calling"
-echo "        uses: swimblocks/.github/.github/workflows/reusable-readability-review.yml@main"
-echo "      (the full caller, with its triggers and permissions, is in CONTRIBUTING.md's Code review),"
 echo "      add a per-repo .github/dependabot.yml, draft an AGENTS.md."
+echo "The readability review's caller is already on the default branch."
 echo "When ready to release publicly: scripts/make-public.sh $REPO"

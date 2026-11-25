@@ -249,22 +249,12 @@ reasoning.
 **Automatic readability review.** Each repo calls the shared
 [`reusable-readability-review.yml`](.github/workflows/reusable-readability-review.yml) from its
 own `.github/workflows/readability-review.yml`, separate from `ci.yml` because it runs on
-different events:
-
-```yaml
-name: Readability review
-on:
-  pull_request:
-    types: [opened, ready_for_review, synchronize, reopened]
-permissions:
-  contents: read
-  pull-requests: write   # the summary comment
-  id-token: write        # signing in to Google Cloud and to the Claude GitHub App
-jobs:
-  review:
-    uses: swimblocks/.github/.github/workflows/reusable-readability-review.yml@main
-    secrets: inherit
-```
+different events. That file is a copy of
+[`workflow-templates/readability-review.yml`](workflow-templates/readability-review.yml).
+[`scripts/create-repo.sh`](scripts/create-repo.sh) commits it to every new repo's default branch,
+and GitHub offers it under a repo's **Actions → New workflow**. A repo that adds it by hand
+gets a failing review check on that one pull request: Claude Code Action runs only once the
+caller is on the default branch.
 
 A pull request is reviewed once, when it is opened or marked ready for review, against the style
 guide for the languages it changes. Findings are inline comments from the Claude GitHub App, and

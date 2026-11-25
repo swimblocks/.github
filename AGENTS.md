@@ -175,8 +175,9 @@ Reference implementation:
 ## 8. Creating a new repo
 
 Use [`scripts/create-repo.sh`](scripts/create-repo.sh) — **never** the GitHub UI. It applies
-the canonical settings from [`.github/settings.yml`](.github/settings.yml) automatically, and
-tells you the `ghq get` line to clone it into the standard local layout.
+the canonical settings from [`.github/settings.yml`](.github/settings.yml) automatically,
+commits the readability review's caller as the repo's first commit, and tells you the `ghq get`
+line to clone it into the standard local layout.
 
 Settings ship as a weekly release: [`release.yml`](.github/workflows/release.yml) publishes a
 `settings-YYYY-MM-DD` tag and [`rollout.yml`](.github/workflows/rollout.yml) applies it to every
