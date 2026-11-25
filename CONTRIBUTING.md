@@ -262,7 +262,8 @@ the review ends with a summary comment saying how many it posted. It runs again 
 only to confirm the review has happened. Drafts, fork pull requests and pull requests from bots
 are skipped. It needs only the Claude GitHub App on the repo: the model token is read from
 Google Cloud over OIDC, and the two secrets that say where to find it are copied into every repo
-by the settings rollout ([`docs/reconciler.md`](docs/reconciler.md)).
+by the settings rollout ([`docs/reconciler.md`](docs/reconciler.md)). What it needs, how to
+operate it and what to do when it fails: [`docs/readability-review.md`](docs/readability-review.md).
 
 Answer every finding: change the code, or reply saying why not, then resolve the thread.
 A finding you reject is as useful as one you accept: the weekly calibration report
