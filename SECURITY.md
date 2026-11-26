@@ -12,3 +12,8 @@ public issue.
 These projects handle data about swimming officials and clubs. If you discover personal data
 (names, emails, contact lists) committed to a repository, or credentials/keys that have leaked
 into history, report it the same way — do not open a public issue that points at the exposure.
+
+## Keeping it from happening
+
+How SwimBlocks code is written to keep credentials and personal data safe, and what checks it,
+is the [security guide](docs/security/README.md).

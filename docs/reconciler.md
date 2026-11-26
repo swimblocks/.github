@@ -55,7 +55,7 @@ The reconciler's permissions are what the script's API calls require, one to one
 | Permission | Grants | Used for |
 |---|---|---|
 | Metadata read | `GET /repos/{repo}` | `gh repo list`, and reading back what was applied |
-| Administration read & write | `PATCH /repos/{repo}`, branch protection, rulesets | merge methods, protection, rulesets |
+| Administration read & write | `PATCH /repos/{repo}`, branch protection, rulesets | merge methods, protection, rulesets, and public repos' secret scanning and push protection |
 | Issues read & write | `POST /repos/{repo}/labels` | creating any label `settings.yml` lists and the repo lacks |
 | Custom properties read & write | `PATCH /repos/{repo}/properties/values` | recording `settings_version` |
 | Secrets read & write | `PUT /repos/{repo}/actions/secrets/{name}`, and listing them | copying `settings.yml`'s `actions_secrets` into every repo, since GitHub Free gives private repos no org secrets (design 0007) |
@@ -98,8 +98,8 @@ permission on the app's installation before the first rollout that needs it; unt
 rollout fails each repo at `secret ... set failed (HTTP 403)`.
 
 **Files every repo carries.** `settings.yml`'s `required_files` lists files every repo must have
-on its default branch, each a copy of one in this repo: today the readability review's caller,
-from [`workflow-templates/`](../workflow-templates/readability-review.yml). The rollout reads
+on its default branch, each a copy of one in this repo: today the readability and security
+reviews' callers, from [`workflow-templates/`](../workflow-templates/). The rollout reads
 each repo's copy and fails the repo if it is missing or differs from its source, line endings
 aside. It never writes one: that would take Contents write on every repo, which the reconciler
 is kept from (above). [`create-repo.sh`](../scripts/create-repo.sh) commits them to a new

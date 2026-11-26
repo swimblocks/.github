@@ -279,6 +279,14 @@ Google Cloud over OIDC, and the two secrets that say where to find it are copied
 by the settings rollout ([`docs/reconciler.md`](docs/reconciler.md)). What it needs, how to
 operate it and what to do when it fails: [`docs/readability-review.md`](docs/readability-review.md).
 
+**Automatic security review.** Each repo also calls the shared
+[`reusable-security-review.yml`](.github/workflows/reusable-security-review.yml) from its own
+`.github/workflows/security-review.yml`, a copy of
+[`workflow-templates/security-review.yml`](workflow-templates/security-review.yml), which
+`create-repo.sh` also commits. It checks each pull request against the
+[security guide](docs/security/README.md), one check per rule, such as `security / secrets`.
+How it runs and what to do when it fails: [`docs/security-review.md`](docs/security-review.md).
+
 Answer every finding: change the code, or reply saying why not, then resolve the thread.
 A finding you reject is as useful as one you accept: the weekly calibration report
 ([design 0007](docs/design/0007-review-standard.md#calibration-report)) counts both, to
@@ -374,6 +382,8 @@ golangci-lint too:
 ## Secrets & data
 
 - Never commit secrets (`.env`, credentials, service-account keys) — they're gitignored.
+  The security review scans each pull request for them, and public repos reject a push that
+  carries one ([security guide](docs/security/README.md#secrets)).
 - Never commit real personal data (officials' names/emails, club contact lists). Treat any
   such CSV/PDF as local sample data and gitignore it, or scrub before committing.
 
@@ -426,6 +436,8 @@ of truth**; the table below is a human-readable summary.
 | `squash_merge_commit_message` | `PR_BODY` | Squash commit body = PR description (so the body must be substantive). |
 | `delete_branch_on_merge` | `true` | Branch deleted automatically after merge. |
 | `allow_update_branch` | `true` | "Update branch" button enabled on PRs. |
+| `secret_scanning` | `enabled` (public repos) | GitHub flags a committed credential. Free for public repos; GitHub Free doesn't offer it to private ones. |
+| `secret_scanning_push_protection` | `enabled` (public repos) | GitHub rejects a push carrying a recognised secret, before it's public. |
 
 ### Branch protection (same source of truth)
 
@@ -438,6 +450,8 @@ bypass actors, so org owners and repo admins can force-push when genuinely neede
 - Linear history required (squash-only — pairs with the merge-method settings above).
 - The readability review's check, `review / review`, must pass
   ([`docs/readability-review.md`](docs/readability-review.md)).
+- The security review's secrets check, `security / secrets`, must pass
+  ([`docs/security-review.md`](docs/security-review.md)).
 - No force pushes or deletions for non-admins.
 
 **Private repos** fall back to the legacy `branches:` protection block. GitHub Free does not

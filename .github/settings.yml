@@ -50,6 +50,15 @@ actions_secrets:
 required_files:
   - path: .github/workflows/readability-review.yml
     source: workflow-templates/readability-review.yml
+  - path: .github/workflows/security-review.yml
+    source: workflow-templates/security-review.yml
+
+# GitHub's secret scanning, set on public repos only: it's free there, and GitHub Free doesn't
+# offer it to private repos. Push protection rejects a push carrying a recognised secret, so
+# it never reaches a public branch.
+security_and_analysis:
+  secret_scanning: enabled
+  secret_scanning_push_protection: enabled
 
 # Branch protection for public repos is handled via GitHub Rulesets (see `rulesets:` below),
 # which support bypass actors so org owners and repo admins can force-push without extra steps
@@ -113,4 +122,7 @@ rulesets:
           do_not_enforce_on_create: false
           required_status_checks:
             - context: review / review
+              integration_id: 15368
+            # The security review's secrets check must pass (docs/security-review.md).
+            - context: security / secrets
               integration_id: 15368
