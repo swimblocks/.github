@@ -426,6 +426,8 @@ of truth**; the table below is a human-readable summary.
 | `squash_merge_commit_message` | `PR_BODY` | Squash commit body = PR description (so the body must be substantive). |
 | `delete_branch_on_merge` | `true` | Branch deleted automatically after merge. |
 | `allow_update_branch` | `true` | "Update branch" button enabled on PRs. |
+| `secret_scanning` | `enabled` (public repos) | GitHub flags a committed credential. Free for public repos; GitHub Free doesn't offer it to private ones. |
+| `secret_scanning_push_protection` | `enabled` (public repos) | GitHub rejects a push carrying a recognised secret, before it's public. |
 
 ### Branch protection (same source of truth)
 

@@ -417,3 +417,74 @@ class TestVerifyRequiredFiles:
                  "source": "workflow-templates/readability-review.yml"}
         assert entry in settings["required_files"]
         assert (root / entry["source"]).is_file()
+
+
+class TestSecurity:
+    BLOCK = {
+        "secret_scanning": "enabled",
+        "secret_scanning_push_protection": "enabled",
+    }
+
+    def test_payload_wraps_each_status(self):
+        assert apply_settings.security_payload(self.BLOCK) == {
+            "security_and_analysis": {
+                "secret_scanning": {"status": "enabled"},
+                "secret_scanning_push_protection": {"status": "enabled"},
+            }
+        }
+
+    def test_apply_sends_the_payload(self, monkeypatch):
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append((cmd, kwargs))
+            return subprocess.CompletedProcess(cmd, 0)
+
+        monkeypatch.setattr(apply_settings.subprocess, "run", fake_run)
+        assert apply_settings.apply_security("o/r", self.BLOCK)
+        cmd, kwargs = calls[0]
+        assert cmd[:5] == ["gh", "api", "-X", "PATCH", "repos/o/r"]
+        want = apply_settings.security_payload(self.BLOCK)
+        assert json.loads(kwargs["input"]) == want
+
+    def test_apply_failure_is_reported(self, monkeypatch, capsys):
+        def fake_run(cmd, **kwargs):
+            raise subprocess.CalledProcessError(
+                1, cmd, stderr="gh: Forbidden (HTTP 403)"
+            )
+
+        monkeypatch.setattr(apply_settings.subprocess, "run", fake_run)
+        assert not apply_settings.apply_security("o/r", self.BLOCK)
+        out = capsys.readouterr().out
+        assert "FAIL security_and_analysis: PATCH failed: gh: Forbidden" in out
+
+    def _verify(self, monkeypatch, actual: dict) -> bool:
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(actual))
+
+        monkeypatch.setattr(apply_settings.subprocess, "run", fake_run)
+        return apply_settings.verify_security("o/r", self.BLOCK)
+
+    def test_verify_passes_when_every_feature_matches(self, monkeypatch, capsys):
+        actual = {
+            "secret_scanning": {"status": "enabled"},
+            "secret_scanning_push_protection": {"status": "enabled"},
+            "dependabot_security_updates": {"status": "disabled"},
+        }
+        assert self._verify(monkeypatch, actual)
+        assert "FAIL" not in capsys.readouterr().out
+
+    def test_verify_fails_on_a_disabled_feature(self, monkeypatch, capsys):
+        actual = {
+            "secret_scanning": {"status": "enabled"},
+            "secret_scanning_push_protection": {"status": "disabled"},
+        }
+        assert not self._verify(monkeypatch, actual)
+        out = capsys.readouterr().out
+        want = "FAIL secret_scanning_push_protection: 'disabled' (expected 'enabled')"
+        assert want in out
+
+    def test_verify_fails_when_github_reports_nothing(self, monkeypatch, capsys):
+        assert not self._verify(monkeypatch, {})
+        out = capsys.readouterr().out
+        assert "FAIL secret_scanning: None (expected 'enabled')" in out
