@@ -73,7 +73,7 @@ jobs:
         run: uv run --no-sync pytest -q
 
       # --- pip (legacy, until the repo migrates) ---
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: ${{ steps.tooling.outputs.tool == 'pip' }}
         with:
           python-version: ${{ inputs.python-version }}
