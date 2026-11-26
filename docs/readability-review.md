@@ -18,6 +18,12 @@ review it finds the summary comment and passes without reviewing again. A pull r
 changes the style guide doesn't cover passes without a review. Drafts, pull requests from forks
 and pull requests opened or pushed by bots (Dependabot) are skipped.
 
+In public repos, the ruleset in [`settings.yml`](../.github/settings.yml) makes the check,
+`review / review`, required, and already requires every review thread to be resolved, so a
+pull request merges only once it has been reviewed and every finding answered. A skipped check
+counts as passed. Private repos get no ruleset on GitHub Free, so there the review advises but
+doesn't block.
+
 ## What it needs
 
 | Where | What | Kept in place by |
@@ -74,6 +80,7 @@ review findings were answered, and suggests changes to the lint set and the styl
 | Symptom | Cause | Fix |
 |---|---|---|
 | The Review step warns `Workflow validation failed. The workflow file must exist and have identical content to the version on the repository's default branch`, then the run fails with `The review didn't write its summary` | The pull request adds or changes the caller, and also changes what the style guide covers; Claude Code Action won't run until the caller is on the default branch | Put the caller change in a pull request of its own, merge it, then push to this one |
+| A pull request can't merge: `review / review` is `Expected — Waiting for status to be reported` | No review ran on the latest commit: the repo has no caller, or the run hasn't started | Check the repo has the caller (the rollout reports it), and that Actions ran on that push |
 | A re-run fails the same way after the reusable workflow was fixed | Re-running failed jobs uses the reusable workflow as it was when the run started | Re-run all jobs instead |
 | `SWIMBLOCKS_CI_REVIEW_SECRET isn't projects/<project>/secrets/<name>` | The secret holds something else | Set it on this repo from `terraform output -raw readability_review_secret`, then run the rollout |
 | Read the model token fails: `the caller does not have permission` | Something on the Google side refused the review's identity | Turn on data access audit logging in the devops Google Cloud project and re-run; the logs should show what refused it. Turn it off afterwards: Terraform owns the project's IAM policy. |
