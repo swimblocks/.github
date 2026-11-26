@@ -78,8 +78,9 @@ fi
 # --- 4. git history secret scan -----------------------------------------
 if [ "$skip_history" -eq 0 ]; then
   echo "  - scanning git history for secret-shaped strings (use --skip-history to bypass) ..."
-  # `git log --all -p` includes deleted content. Stop at first match.
-  if git -C "$tmp/repo" log --all -p 2>/dev/null | grep -m1 -nE "$SECRET_RE" >/dev/null; then
+  # `git log --all -p` includes deleted content. --text and --diff-merges=first-parent: see the
+  # gitleaks scan below. Stop at first match.
+  if git -C "$tmp/repo" log --all -p --text --diff-merges=first-parent 2>/dev/null | grep -m1 -nE "$SECRET_RE" >/dev/null; then
     echo
     echo "FAIL: git history contains secret-shaped strings." >&2
     echo "  Scrub with git-filter-repo (or BFG) before making the repo public," >&2
@@ -98,8 +99,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # A path the scanners understand: on Windows they are native programs, which can't read
 # Git Bash's /tmp/... paths.
 native_path() {
-  if command -v cygpath >/dev/null; then cygpath -m "$1"; else printf '%s
-' "$1"; fi
+  if command -v cygpath >/dev/null; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
 }
 
 echo "  - downloading gitleaks and trufflehog ..."
@@ -112,8 +112,13 @@ if [ -f "$tmp/repo/.gitleaksignore" ]; then
   echo "  - the repo's .gitleaksignore suppresses $n finding(s); review them before going public"
 fi
 
+# --text scans a file even if the repo's .gitattributes marks it binary (-diff), which would
+# otherwise hide its patch. --diff-merges=first-parent scans each merge against the branch it
+# was made on, so a secret typed while resolving a conflict is seen; plain `git log -p` prints
+# no patch for a merge.
 echo "  - scanning git history with gitleaks ..."
-if ! "$gitleaks" git "$repo_path" --log-opts=--all --no-banner --redact \
+if ! "$gitleaks" git "$repo_path" --log-opts="--all --text --diff-merges=first-parent" \
+    --no-banner --redact \
     --config "$(native_path "$SCRIPT_DIR/../.gitleaks.toml")" --gitleaks-ignore-path "$repo_path"; then
   echo
   echo "FAIL: gitleaks reported findings (above), or couldn't run. Resolve before going public:" >&2

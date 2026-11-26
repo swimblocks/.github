@@ -1,5 +1,6 @@
-# The org's gitleaks rules, passed with --config by scripts/make-public.sh, so every repo is
-# scanned against the same standard: gitleaks' default rules, plus whatever is added here.
+# The org's gitleaks rules, passed with --config by the security review and
+# scripts/make-public.sh, so every repo is scanned against the same standard: gitleaks' default
+# rules, plus whatever is added here (docs/security/README.md#secrets).
 #
 # Change this file for something every repo should share. A false positive in one repo is
 # that repo's exception: add the finding's fingerprint to its .gitleaksignore, or mark the
