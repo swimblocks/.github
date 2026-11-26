@@ -7,7 +7,7 @@ sequential, never reused.
 Once implemented, a design is the record of a decision, not a description of how things are
 now: that belongs in a living doc, such as [`docs/readability-review.md`](../readability-review.md).
 Changing an implemented design's decision, or taking up one of its open items, takes a new
-design, which says what it supersedes.
+design, which links the one it changes.
 
 > The org-wide workflow rule for when a design doc is required is being folded into
 > [CONTRIBUTING.md](../../CONTRIBUTING.md) and `AGENTS.md` under
