@@ -19,11 +19,12 @@
 #   2. Clone the repo (shallow + full history) into a tmpdir.
 #   3. Scan the working tree for secret-shaped strings.
 #   4. Scan the git history for the same (unless --skip-history).
-#   5. Check for LICENSE and README.md (warn, do not block).
-#   6. Confirm with the operator.
-#   7. Flip visibility to public.
-#   8. Wait for GitHub to release the visibility-flip lock.
-#   9. Apply settings.yml (which now installs branch protection too).
+#   5. Scan with gitleaks and trufflehog, downloaded at pinned releases.
+#   6. Check for LICENSE and README.md (warn, do not block).
+#   7. Confirm with the operator.
+#   8. Flip visibility to public.
+#   9. Wait for GitHub to release the visibility-flip lock.
+#  10. Apply settings.yml (which now installs branch protection too).
 #
 # Add new checks above. Keep them ordered cheapest-first.
 set -euo pipefail
@@ -64,8 +65,7 @@ fi
 
 # --- 3. secret patterns --------------------------------------------------
 # Cheap, fast, narrowly-shaped regexes. False positives are OK; false
-# negatives aren't. Tracking deeper coverage (gitleaks / trufflehog) under
-# https://github.com/swimblocks/.github/issues/8.
+# negatives aren't. Step 5 runs the maintained scanners on top.
 SECRET_RE='(AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]+PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{82}|GOCSPX-[A-Za-z0-9_-]{28}|xox[abprs]-[0-9]{10,}-[0-9]{10,}|(api[_-]?key|api[_-]?secret|access[_-]?token|client[_-]?secret)[[:space:]]*[:=][[:space:]]*['"'"'"][A-Za-z0-9_-]{20,}['"'"'"]|(mysql|postgres|mongodb)://[^:]+:[^@]+@)'
 
 echo "  - scanning working tree for secret-shaped strings ..."
@@ -88,7 +88,55 @@ if [ "$skip_history" -eq 0 ]; then
   fi
 fi
 
-# --- 5. required-file audit (warn only) ---------------------------------
+# --- 5. gitleaks and trufflehog -------------------------------------------
+# Each is downloaded at a pinned release (fetch-scanner.sh), so nothing needs installing.
+# gitleaks uses the org's rules (.gitleaks.toml in this repo). A repo makes its exceptions
+# where they're committed and reviewed: fingerprints in its .gitleaksignore, or a
+# gitleaks:allow or trufflehog:ignore comment on the line.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# A path the scanners understand: on Windows they are native programs, which can't read
+# Git Bash's /tmp/... paths.
+native_path() {
+  if command -v cygpath >/dev/null; then cygpath -m "$1"; else printf '%s
+' "$1"; fi
+}
+
+echo "  - downloading gitleaks and trufflehog ..."
+gitleaks=$("$SCRIPT_DIR/fetch-scanner.sh" gitleaks "$tmp/tools/gitleaks")
+trufflehog=$("$SCRIPT_DIR/fetch-scanner.sh" trufflehog "$tmp/tools/trufflehog")
+
+repo_path=$(native_path "$tmp/repo")
+if [ -f "$tmp/repo/.gitleaksignore" ]; then
+  n=$(grep -cvE '^[[:space:]]*(#|$)' "$tmp/repo/.gitleaksignore" || true)
+  echo "  - the repo's .gitleaksignore suppresses $n finding(s); review them before going public"
+fi
+
+echo "  - scanning git history with gitleaks ..."
+if ! "$gitleaks" git "$repo_path" --log-opts=--all --no-banner --redact \
+    --config "$(native_path "$SCRIPT_DIR/../.gitleaks.toml")" --gitleaks-ignore-path "$repo_path"; then
+  echo
+  echo "FAIL: gitleaks reported findings (above), or couldn't run. Resolve before going public:" >&2
+  echo "  scrub or rotate a real secret; for a false positive, add its fingerprint to the" >&2
+  echo "  repo's .gitleaksignore in a pull request." >&2
+  exit 1
+fi
+
+# Trusting the clone's git config scans it in place, every branch (git log --all), where
+# trufflehog would otherwise re-clone it and see only the checked-out branch. Safe: gh wrote
+# that config, not the repo. --fail exits non-zero only on a finding; --fail-on-scan-errors
+# makes a scan that broke partway fail too, rather than pass having seen less than it should.
+echo "  - scanning git history with trufflehog ..."
+if ! "$trufflehog" git "file://$repo_path" --trust-local-git-config \
+    --no-update --fail --fail-on-scan-errors; then
+  echo
+  echo "FAIL: trufflehog reported findings (above), or couldn't run. Resolve before going public:" >&2
+  echo "  scrub or rotate a real secret; for a false positive, mark the line trufflehog:ignore" >&2
+  echo "  in a pull request." >&2
+  exit 1
+fi
+
+# --- 6. required-file audit (warn only) ---------------------------------
 echo "  - checking recommended public-repo files ..."
 for f in LICENSE README.md; do
   if [ ! -e "$tmp/repo/$f" ]; then
@@ -96,7 +144,7 @@ for f in LICENSE README.md; do
   fi
 done
 
-# --- 6. confirm ----------------------------------------------------------
+# --- 7. confirm ----------------------------------------------------------
 echo
 echo "All automated checks complete. About to flip $repo to PUBLIC."
 echo "GitHub strongly discourages flipping back, so treat this as irreversible."
@@ -107,13 +155,12 @@ if [ "$yes" -eq 0 ]; then
   fi
 fi
 
-# --- 7. flip -------------------------------------------------------------
+# --- 8. flip -------------------------------------------------------------
 echo "==> Flipping visibility to public"
 gh repo edit "$repo" --visibility public --accept-visibility-change-consequences
 
-# --- 8. wait for the visibility-flip lock to release ---------------------
+# --- 9. wait for the visibility-flip lock to release ---------------------
 echo "==> Waiting for GitHub to release the temporary lock"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APPLY="python $SCRIPT_DIR/apply_settings.py"
 for i in $(seq 1 15); do
   if $APPLY "$repo" >/dev/null 2>&1; then
@@ -127,7 +174,7 @@ for i in $(seq 1 15); do
   sleep 2
 done
 
-# --- 9. final, verbose apply (so the operator sees the green ticks) -----
+# --- 10. final, verbose apply (so the operator sees the green ticks) ----
 echo "==> Applying canonical settings"
 $APPLY "$repo"
 
