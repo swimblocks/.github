@@ -322,6 +322,55 @@ def verify_required_files(repo: str, files_block: list[dict], root: Path) -> boo
     return ok
 
 
+# ---------------------------------------------------------------------------
+# Security and analysis
+#
+# GitHub's secret scanning and push protection, which `security_and_analysis:`
+# turns on in public repos only: they're free there, and GitHub Free doesn't
+# offer them to private repos.
+# ---------------------------------------------------------------------------
+
+def security_payload(block: dict[str, str]) -> dict:
+    """The `PATCH /repos/{repo}` body setting each feature in *block* to its status."""
+    return {"security_and_analysis": {
+        feature: {"status": status} for feature, status in block.items()}}
+
+
+def apply_security(repo: str, block: dict[str, str]) -> bool:
+    """Set each feature in *block* on *repo*. Returns False on failure."""
+    try:
+        subprocess.run(
+            ["gh", "api", "-X", "PATCH", f"repos/{repo}", "--input", "-"],
+            input=json.dumps(security_payload(block)), text=True,
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"  FAIL security_and_analysis: PATCH failed{gh_error(e)}")
+        return False
+    return True
+
+
+def verify_security(repo: str, block: dict[str, str]) -> bool:
+    """Confirm each feature in *block* has its status on *repo*."""
+    try:
+        out = subprocess.run(
+            ["gh", "api", f"repos/{repo}", "--jq", ".security_and_analysis // {}"],
+            check=True, capture_output=True, text=True,
+        ).stdout
+    except subprocess.CalledProcessError as e:
+        print(f"  FAIL security_and_analysis: could not read back{gh_error(e)}")
+        return False
+    actual = json.loads(out)
+    ok = True
+    for feature, want in block.items():
+        got = (actual.get(feature) or {}).get("status")
+        marker = "OK " if got == want else "FAIL"
+        if got != want:
+            ok = False
+        print(f"  {marker} {feature}: {got!r} (expected {want!r})")
+    return ok
+
+
 # Top-level keys of the branch protection PUT body. Anything not in this set is
 # rejected by the API, so we filter `protection:` in the YAML down to these.
 PROTECTION_KEYS = {
@@ -560,6 +609,7 @@ def main(argv: list[str]) -> int:
     secret_vals, secrets_missing = secret_values(
         settings.get("actions_secrets") or [], dict(os.environ))
     files_block = settings.get("required_files") or []
+    security_block = settings.get("security_and_analysis") or {}
 
     failures: list[str] = []
     for repo in opts.repos:
@@ -602,6 +652,13 @@ def main(argv: list[str]) -> int:
                 failures.append(repo)
 
         is_public = get_repo_visibility(repo) == "public"
+
+        if is_public and security_block:
+            security_ok = apply_security(repo, security_block)
+            if security_ok:
+                security_ok = verify_security(repo, security_block)
+            if not security_ok and repo not in failures:
+                failures.append(repo)
 
         if is_public and rulesets_block:
             # Public repos: rulesets with bypass actors for admin force-push

@@ -55,7 +55,7 @@ The reconciler's permissions are what the script's API calls require, one to one
 | Permission | Grants | Used for |
 |---|---|---|
 | Metadata read | `GET /repos/{repo}` | `gh repo list`, and reading back what was applied |
-| Administration read & write | `PATCH /repos/{repo}`, branch protection, rulesets | merge methods, protection, rulesets |
+| Administration read & write | `PATCH /repos/{repo}`, branch protection, rulesets | merge methods, protection, rulesets, and public repos' secret scanning and push protection |
 | Issues read & write | `POST /repos/{repo}/labels` | creating any label `settings.yml` lists and the repo lacks |
 | Custom properties read & write | `PATCH /repos/{repo}/properties/values` | recording `settings_version` |
 | Secrets read & write | `PUT /repos/{repo}/actions/secrets/{name}`, and listing them | copying `settings.yml`'s `actions_secrets` into every repo, since GitHub Free gives private repos no org secrets (design 0007) |
