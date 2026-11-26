@@ -1,6 +1,6 @@
 # 0005 — Go as an org language
 
-Status: proposed
+Status: implemented
 
 Tracking issue: [#63](https://github.com/swimblocks/.github/issues/63).
 

@@ -4,6 +4,11 @@ Sequential, append-only design docs for non-trivial changes to this repo. Each f
 Context → Design → Verification → Open items, with a `Status:` header. Filename `NNNN-short-name.md`,
 sequential, never reused.
 
+Once implemented, a design is the record of a decision, not a description of how things are
+now: that belongs in a living doc, such as [`docs/readability-review.md`](../readability-review.md).
+Changing an implemented design's decision, or taking up one of its open items, takes a new
+design, which links the one it changes.
+
 > The org-wide workflow rule for when a design doc is required is being folded into
 > [CONTRIBUTING.md](../../CONTRIBUTING.md) and `AGENTS.md` under
 > [#23](https://github.com/swimblocks/.github/issues/23). Until that lands, this directory follows
@@ -14,7 +19,7 @@ sequential, never reused.
 | [0001](0001-github-app-reconciler.md) | GitHub App authentication for the reconciler workflow | implemented |
 | [0002](0002-venv-standard.md) | venv standard + devcontainer provisioning | implemented |
 | [0003](0003-settings-releases-and-rollout.md) | Settings as a versioned release, rolled out weekly | implemented |
-| [0004](0004-uv-standard.md) | uv as the org Python toolchain | proposed |
-| [0005](0005-go-standard.md) | Go as an org language | proposed |
+| [0004](0004-uv-standard.md) | uv as the org Python toolchain | implemented |
+| [0005](0005-go-standard.md) | Go as an org language | implemented |
 | [0006](0006-aep-apis.md) | APIs follow the AEPs | proposed |
-| [0007](0007-review-standard.md) | Automatic readability review and a stricter Go lint set | proposed |
+| [0007](0007-review-standard.md) | Automatic readability review and a stricter Go lint set | implemented |

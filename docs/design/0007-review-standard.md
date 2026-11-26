@@ -1,6 +1,6 @@
 # 0007 — Automatic readability review and a stricter Go lint set
 
-Status: proposed
+Status: implemented
 
 Tracking issue: [#68](https://github.com/swimblocks/.github/issues/68).
 

@@ -1,6 +1,6 @@
 # 0004 — uv as the org Python toolchain
 
-Status: proposed
+Status: implemented
 
 Tracking issue: [#33](https://github.com/swimblocks/.github/issues/33). Supersedes the
 *mechanism* in [0002](0002-venv-standard.md); the rule it established stands.
