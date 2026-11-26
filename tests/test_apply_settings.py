@@ -488,3 +488,15 @@ class TestSecurity:
         assert not self._verify(monkeypatch, {})
         out = capsys.readouterr().out
         assert "FAIL secret_scanning: None (expected 'enabled')" in out
+
+    def test_verify_reports_a_failed_readback(self, monkeypatch, capsys):
+        # One repo's failed read must not stop the rollout for the rest.
+        def fake_run(cmd, **kwargs):
+            raise subprocess.CalledProcessError(
+                1, cmd, stderr="gh: Bad Gateway (HTTP 502)"
+            )
+
+        monkeypatch.setattr(apply_settings.subprocess, "run", fake_run)
+        assert not apply_settings.verify_security("o/r", self.BLOCK)
+        out = capsys.readouterr().out
+        assert "FAIL security_and_analysis: could not read back: gh: Bad Gateway" in out

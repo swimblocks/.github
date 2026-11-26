@@ -352,10 +352,14 @@ def apply_security(repo: str, block: dict[str, str]) -> bool:
 
 def verify_security(repo: str, block: dict[str, str]) -> bool:
     """Confirm each feature in *block* has its status on *repo*."""
-    out = subprocess.run(
-        ["gh", "api", f"repos/{repo}", "--jq", ".security_and_analysis // {}"],
-        check=True, capture_output=True, text=True,
-    ).stdout
+    try:
+        out = subprocess.run(
+            ["gh", "api", f"repos/{repo}", "--jq", ".security_and_analysis // {}"],
+            check=True, capture_output=True, text=True,
+        ).stdout
+    except subprocess.CalledProcessError as e:
+        print(f"  FAIL security_and_analysis: could not read back{gh_error(e)}")
+        return False
     actual = json.loads(out)
     ok = True
     for feature, want in block.items():
