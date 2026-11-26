@@ -1,6 +1,6 @@
 <!-- Title: use the issue's subject. Keep it short; put detail in the body. -->
 
-Closes #<!-- issue number -->
+Closes #<!-- issue number. Use Refs instead if this PR leaves more to do on the issue. -->
 
 ## What & why
 
@@ -12,7 +12,7 @@ Closes #<!-- issue number -->
 
 ## Checklist
 
-- [ ] Linked the issue this PR closes
+- [ ] Linked the issue: `Closes` if this PR finishes it, `Refs` if not
 - [ ] Tests added/updated and passing
 - [ ] `ruff check .` clean (Python repos)
 - [ ] Docs/README updated if user-facing behaviour changed
