@@ -98,8 +98,8 @@ permission on the app's installation before the first rollout that needs it; unt
 rollout fails each repo at `secret ... set failed (HTTP 403)`.
 
 **Files every repo carries.** `settings.yml`'s `required_files` lists files every repo must have
-on its default branch, each a copy of one in this repo: today the readability review's caller,
-from [`workflow-templates/`](../workflow-templates/readability-review.yml). The rollout reads
+on its default branch, each a copy of one in this repo: today the readability and security
+reviews' callers, from [`workflow-templates/`](../workflow-templates/). The rollout reads
 each repo's copy and fails the repo if it is missing or differs from its source, line endings
 aside. It never writes one: that would take Contents write on every repo, which the reconciler
 is kept from (above). [`create-repo.sh`](../scripts/create-repo.sh) commits them to a new
