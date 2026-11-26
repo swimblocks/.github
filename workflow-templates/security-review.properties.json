@@ -1,0 +1,4 @@
+{
+  "name": "Security review",
+  "description": "The SwimBlocks security review: each pull request is checked against the org's security rules."
+}

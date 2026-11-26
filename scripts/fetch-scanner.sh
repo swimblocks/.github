@@ -4,8 +4,8 @@
 # Usage:
 #   scripts/fetch-scanner.sh gitleaks|trufflehog <dir>
 #
-# make-public.sh and the secret-scan workflow both fetch their scanners here, so they run the
-# same versions. Each download is checked against the release's checksums file, whose own
+# make-public.sh and the security review both fetch their scanners here, so they run the same
+# versions. Each download is checked against the release's checksums file, whose own
 # SHA-256 is pinned below. To move to a new release, change the version and the hash together:
 #   gh release download v<version> -R <owner>/<repo> -p '*_checksums.txt' && sha256sum *_checksums.txt
 set -euo pipefail
