@@ -98,7 +98,8 @@ the repo if:
 - it has no `dependabot.yml`;
 - an ecosystem and directory from the table above has no entry covering it (`directory`, or a
   matching `directories` glob);
-- an entry isn't weekly, or its cooldown is shorter than the org's.
+- an entry isn't weekly, or any of its cooldown days (`default-days`, or a `semver-*-days`
+  that overrides it) is shorter than the org's.
 
 It never writes the file: the reconciler has Contents read, not write
 ([`docs/reconciler.md`](../reconciler.md)). A failing repo is fixed by a pull request, as a
@@ -109,8 +110,9 @@ cooldown), so changing them is one change in one place, and the check follows.
 
 Dependabot alerts (`PUT /repos/{repo}/vulnerability-alerts`) and Dependabot security updates
 (`PUT /repos/{repo}/automated-security-fixes`) are free on every repo, private ones included,
-and are settings rather than `dependabot.yml` keys. Security updates need alerts on. `settings.yml` turns both on in
-every repo, and the rollout turns them back on if they're turned off.
+and are settings rather than `dependabot.yml` keys; security updates need alerts on.
+`settings.yml` turns both on in every repo, and the rollout turns them back on if they're
+turned off.
 
 ### New repos
 
