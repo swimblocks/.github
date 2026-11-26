@@ -422,6 +422,8 @@ bypass actors, so org owners and repo admins can force-push when genuinely neede
 - Pull request required (1 approving review, code-owner review required, stale reviews
   dismissed on new pushes, all threads resolved).
 - Linear history required (squash-only — pairs with the merge-method settings above).
+- The readability review's check, `review / review`, must pass
+  ([`docs/readability-review.md`](docs/readability-review.md)).
 - No force pushes or deletions for non-admins.
 
 **Private repos** fall back to the legacy `branches:` protection block. GitHub Free does not
