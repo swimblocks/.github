@@ -55,7 +55,7 @@ jobs:
           echo "Rolling out $tag"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ secrets.APP_ID }}
