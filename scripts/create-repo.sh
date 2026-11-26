@@ -37,14 +37,14 @@ done
 
 REPO="swimblocks/$name"
 
-# Adding the readability review's caller below creates a file under .github/workflows, which
-# needs the token's workflow scope. Check before creating anything, so a missing scope can't
+# Adding the org's workflow callers below creates files under .github/workflows, which needs
+# the token's workflow scope. Check before creating anything, so a missing scope can't
 # leave a repo created but not set up. A token that reports no scopes (fine-grained, or an
 # app's) is left to the call itself.
 scopes=$(gh api -i user 2>/dev/null | tr -d '\r' | sed -n 's/^[Xx]-[Oo][Aa]uth-[Ss]copes: //p')
 if [ -n "$scopes" ] && ! grep -qw workflow <<<"${scopes//,/ }"; then
-  echo "error: your gh token lacks the workflow scope, needed to add the readability review's" >&2
-  echo "       caller. Add it with: gh auth refresh -s workflow" >&2
+  echo "error: your gh token lacks the workflow scope, needed to add the org's workflow" >&2
+  echo "       callers. Add it with: gh auth refresh -s workflow" >&2
   exit 1
 fi
 
@@ -59,15 +59,20 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# The readability review's caller goes in as the repo's first commit, before anyone opens a
-# pull request: Claude Code Action runs only once the caller is on the default branch. It is
-# one of settings.yml's required_files, which the settings check below then confirms.
+# The org's workflow callers go in as the repo's first commits, before anyone opens a pull
+# request: Claude Code Action runs only once the readability review's caller is on the default
+# branch. The settings check below confirms the ones settings.yml's required_files lists.
 # Carriage returns are dropped, so a Windows checkout's copy matches the template's.
-echo "==> Adding the readability review caller"
-gh api -X PUT "repos/$REPO/contents/.github/workflows/readability-review.yml" \
-  -f message="Call the org's readability review" \
-  -f content="$(tr -d '\r' < "$SCRIPT_DIR/../workflow-templates/readability-review.yml" | base64 | tr -d '\n')" \
-  >/dev/null
+add_caller() {
+  local name=$1 message=$2
+  echo "==> Adding the $name caller"
+  gh api -X PUT "repos/$REPO/contents/.github/workflows/$name.yml" \
+    -f message="$message" \
+    -f content="$(tr -d '\r' < "$SCRIPT_DIR/../workflow-templates/$name.yml" | base64 | tr -d '\n')" \
+    >/dev/null
+}
+add_caller readability-review "Call the org's readability review"
+add_caller secret-scan "Call the org's secret scan"
 
 echo "==> Applying canonical settings"
 python "$SCRIPT_DIR/apply_settings.py" "$REPO"
@@ -80,5 +85,5 @@ echo "        Python: uses: swimblocks/.github/.github/workflows/reusable-python
 echo "        Go:     uses: swimblocks/.github/.github/workflows/reusable-go-ci.yml@main"
 echo "      (a Go repo starts on the current stable Go release, named by go.mod's go directive),"
 echo "      add a per-repo .github/dependabot.yml, draft an AGENTS.md."
-echo "The readability review's caller is already on the default branch."
+echo "The readability review's and secret scan's callers are already on the default branch."
 echo "When ready to release publicly: scripts/make-public.sh $REPO"

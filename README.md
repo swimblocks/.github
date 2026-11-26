@@ -32,6 +32,10 @@ Organization-wide defaults for [SwimBlocks](https://github.com/swimblocks).
   — the automatic readability review, called from each repo's copy of
   [`workflow-templates/readability-review.yml`](workflow-templates/readability-review.yml).
   See [`docs/readability-review.md`](docs/readability-review.md).
+- [`.github/workflows/reusable-secret-scan.yml`](.github/workflows/reusable-secret-scan.yml)
+  — scans each pull request for secrets with gitleaks, called from each repo's copy of
+  [`workflow-templates/secret-scan.yml`](workflow-templates/secret-scan.yml).
+  See [`docs/secret-scanning.md`](docs/secret-scanning.md).
 - [`docs/development.md`](docs/development.md) — recommended local layout (ghq),
   user-local agent files, and how they relate to per-repo files. Start here when setting up
   a new machine.
