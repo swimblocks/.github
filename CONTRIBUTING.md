@@ -506,11 +506,17 @@ That script is the canonical place where we accumulate pre-public checks. Curren
    private keys, GitHub PATs, Google OAuth client secrets, Slack tokens, embedded URL
    credentials, `api_key=...` etc.).
 3. Scans the **git history** for the same (skip with `--skip-history` at your own risk).
-4. Warns if `LICENSE` or `README.md` is missing.
-5. Asks for typed confirmation.
-6. Flips visibility via `gh repo edit --visibility public`.
-7. Polls until GitHub releases the visibility-flip lock.
-8. Re-runs `apply_settings.py`, which now installs branch protection.
+4. Scans every branch's history with [gitleaks](https://github.com/gitleaks/gitleaks) and
+   [trufflehog](https://github.com/trufflesecurity/trufflehog). The script downloads each at a
+   pinned release and checks its checksum, so there's nothing to install. gitleaks uses the
+   org's rules, [`.gitleaks.toml`](.gitleaks.toml). A false positive is the repo's own
+   exception, made in a pull request: its fingerprint in the repo's `.gitleaksignore`, or a
+   `gitleaks:allow` or `trufflehog:ignore` comment on the line.
+5. Warns if `LICENSE` or `README.md` is missing.
+6. Asks for typed confirmation.
+7. Flips visibility via `gh repo edit --visibility public`.
+8. Polls until GitHub releases the visibility-flip lock.
+9. Re-runs `apply_settings.py`, which now installs branch protection.
 
 **When we learn something new is required before a repo can safely go public, that check goes
 into `make-public.sh`** rather than being remembered. Treat the script as a living checklist.
