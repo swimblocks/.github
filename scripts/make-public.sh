@@ -89,68 +89,22 @@ if [ "$skip_history" -eq 0 ]; then
 fi
 
 # --- 5. gitleaks and trufflehog -------------------------------------------
-# Each is downloaded at a pinned release, so nothing needs installing, and checked against
-# the release's checksums file, whose own SHA-256 is pinned here. To move to a new release,
-# change the version and the hash together:
-#   gh release download v<version> -R <owner>/<repo> -p '*_checksums.txt' && sha256sum *_checksums.txt
+# Each is downloaded at a pinned release (fetch-scanner.sh), so nothing needs installing.
 # gitleaks uses the org's rules (.gitleaks.toml in this repo). A repo makes its exceptions
 # where they're committed and reviewed: fingerprints in its .gitleaksignore, or a
 # gitleaks:allow or trufflehog:ignore comment on the line.
-GITLEAKS_VERSION=8.30.1
-GITLEAKS_SUMS_SHA256=061476c21adaf5441516f96f185c1a4706a83cd6329b9b38762271b3d4a52fae
-TRUFFLEHOG_VERSION=3.100.1
-TRUFFLEHOG_SUMS_SHA256=c277663d2164d6b954445412c1a0783435b1216fd102b48d1e4ce0a9a799e340
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-case "$(uname -s)" in
-  Linux) os=linux ;;
-  Darwin) os=darwin ;;
-  MINGW*|MSYS*|CYGWIN*) os=windows ;;
-  *) echo "FAIL: gitleaks and trufflehog have no release for $(uname -s)" >&2; exit 1 ;;
-esac
-case "$(uname -m)" in
-  x86_64|amd64) arch=amd64 ;;
-  aarch64|arm64) arch=arm64 ;;
-  *) echo "FAIL: gitleaks and trufflehog have no release for $(uname -m)" >&2; exit 1 ;;
-esac
-
-sha256() {
-  if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1
-}
 
 # A path the scanners understand: on Windows they are native programs, which can't read
 # Git Bash's /tmp/... paths.
 native_path() {
-  if command -v cygpath >/dev/null; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
+  if command -v cygpath >/dev/null; then cygpath -m "$1"; else printf '%s
+' "$1"; fi
 }
 
-# fetch_tool <name> <owner/repo> <version> <asset> <pinned SHA-256 of the checksums file>
-# Downloads and unpacks the asset into $tmp/tools/<name>, or exits if anything doesn't match.
-fetch_tool() {
-  local name=$1 source=$2 version=$3 asset=$4 sums_sha=$5
-  local dir="$tmp/tools/$name" sums="${name}_${version}_checksums.txt"
-  mkdir -p "$dir"
-  gh release download "v$version" -R "$source" -p "$asset" -p "$sums" -D "$dir"
-  if [ "$(sha256 "$dir/$sums")" != "$sums_sha" ]; then
-    echo "FAIL: $sums doesn't match the SHA-256 pinned in this script" >&2; exit 1
-  fi
-  if [ "$(sha256 "$dir/$asset")" != "$(awk -v a="$asset" '$2 == a { print $1 }' "$dir/$sums")" ]; then
-    echo "FAIL: $asset doesn't match $sums" >&2; exit 1
-  fi
-  case "$asset" in
-    *.zip) python -m zipfile -e "$dir/$asset" "$dir" ;;
-    *) tar -xzf "$dir/$asset" -C "$dir" ;;
-  esac
-}
-
-echo "  - downloading gitleaks $GITLEAKS_VERSION and trufflehog $TRUFFLEHOG_VERSION ..."
-gitleaks_arch=$arch; [ "$arch" = amd64 ] && gitleaks_arch=x64
-gitleaks_ext=tar.gz; [ "$os" = windows ] && gitleaks_ext=zip
-fetch_tool gitleaks gitleaks/gitleaks "$GITLEAKS_VERSION" \
-  "gitleaks_${GITLEAKS_VERSION}_${os}_${gitleaks_arch}.${gitleaks_ext}" "$GITLEAKS_SUMS_SHA256"
-fetch_tool trufflehog trufflesecurity/trufflehog "$TRUFFLEHOG_VERSION" \
-  "trufflehog_${TRUFFLEHOG_VERSION}_${os}_${arch}.tar.gz" "$TRUFFLEHOG_SUMS_SHA256"
+echo "  - downloading gitleaks and trufflehog ..."
+gitleaks=$("$SCRIPT_DIR/fetch-scanner.sh" gitleaks "$tmp/tools/gitleaks")
+trufflehog=$("$SCRIPT_DIR/fetch-scanner.sh" trufflehog "$tmp/tools/trufflehog")
 
 repo_path=$(native_path "$tmp/repo")
 if [ -f "$tmp/repo/.gitleaksignore" ]; then
@@ -159,7 +113,7 @@ if [ -f "$tmp/repo/.gitleaksignore" ]; then
 fi
 
 echo "  - scanning git history with gitleaks ..."
-if ! "$tmp/tools/gitleaks/gitleaks" git "$repo_path" --log-opts=--all --no-banner --redact \
+if ! "$gitleaks" git "$repo_path" --log-opts=--all --no-banner --redact \
     --config "$(native_path "$SCRIPT_DIR/../.gitleaks.toml")" --gitleaks-ignore-path "$repo_path"; then
   echo
   echo "FAIL: gitleaks reported findings (above), or couldn't run. Resolve before going public:" >&2
@@ -172,7 +126,7 @@ fi
 # trufflehog would otherwise re-clone it and see only the checked-out branch. Safe: gh wrote
 # that config, not the repo.
 echo "  - scanning git history with trufflehog ..."
-if ! "$tmp/tools/trufflehog/trufflehog" git "file://$repo_path" --trust-local-git-config \
+if ! "$trufflehog" git "file://$repo_path" --trust-local-git-config \
     --no-update --fail; then
   echo
   echo "FAIL: trufflehog reported findings (above), or couldn't run. Resolve before going public:" >&2
