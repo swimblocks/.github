@@ -33,8 +33,8 @@ Organization-wide defaults for [SwimBlocks](https://github.com/swimblocks).
   [`workflow-templates/readability-review.yml`](workflow-templates/readability-review.yml).
   See [`docs/readability-review.md`](docs/readability-review.md).
 - [`.github/workflows/reusable-security-review.yml`](.github/workflows/reusable-security-review.yml)
-  — the automatic security review, which checks each pull request against the org's security
-  rules, called from each repo's copy of
+  — the automatic security review, which checks each pull request against the
+  [security guide](docs/security/README.md), called from each repo's copy of
   [`workflow-templates/security-review.yml`](workflow-templates/security-review.yml).
   See [`docs/security-review.md`](docs/security-review.md).
 - [`docs/development.md`](docs/development.md) — recommended local layout (ghq),

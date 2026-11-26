@@ -1,52 +1,20 @@
 # Security review
 
-Living reference for the org's security rules and the automatic security review that checks
-them: [`reusable-security-review.yml`](../.github/workflows/reusable-security-review.yml) and
-the caller each repo runs it from. Keep this doc current as they change. A security problem
-that does reach a repo is reported privately, through the repo's Security tab, not in a public
-issue.
+Living reference for the automatic security review:
+[`reusable-security-review.yml`](../.github/workflows/reusable-security-review.yml) and the
+caller each repo runs it from. Keep this doc current as they change. The rules it checks are
+the [security guide](security/README.md); how to report a problem that has already happened is
+[`SECURITY.md`](../SECURITY.md).
 
 ## What it does
 
-Each job in the workflow checks one rule, and reports its own check, `security / <job>`, so
-each can be required on its own. A new rule's check is a new job, and needs no change in any
-repo.
+Each job in the workflow checks one rule of the security guide, on every pull request, and
+reports its own check, `security / <job>`, so each can be required on its own. A new rule's
+check is a new job, and needs no change in any repo.
 
 | Rule | Check | What it does |
 |---|---|---|
-| [No secrets in the code](#no-secrets-in-the-code) | `security / secrets` | gitleaks scans the pull request's commits; a finding fails the check |
-
-## No secrets in the code
-
-Credentials, keys and tokens are never committed: `.env` files, service-account keys and the
-like are gitignored ([CONTRIBUTING.md → Secrets & data](../CONTRIBUTING.md#secrets--data)).
-Four things check for them:
-
-| When | What | Where |
-|---|---|---|
-| A push | GitHub's push protection rejects a push that carries a recognised secret | Public repos |
-| Any commit | GitHub's secret scanning raises an alert on the Security tab | Public repos |
-| Each pull request | `security / secrets`: gitleaks scans the pull request's commits | Every repo with the caller |
-| Before a repo goes public | [`make-public.sh`](../scripts/make-public.sh) scans every branch's whole history with its own patterns, gitleaks and trufflehog, and won't flip the repo on a finding | The repo being promoted |
-
-GitHub Free doesn't offer secret scanning or push protection to private repos, so there the
-pull request scan is the only check on new commits. [`settings.yml`](../.github/settings.yml)
-turns both on in public repos, and the rollout turns them back on if they're turned off.
-
-**Rules and exceptions.** gitleaks uses the org's rules, [`.gitleaks.toml`](../.gitleaks.toml):
-its default rules, plus anything added there. Change that file for something every repo should
-share. A false positive in one repo is that repo's exception, made in a pull request so it's
-reviewed:
-
-- the finding's fingerprint, which gitleaks prints, on a line of the repo's `.gitleaksignore`;
-- or a `gitleaks:allow` comment on the line, or `trufflehog:ignore` for trufflehog, which runs
-  only in `make-public.sh`.
-
-`make-public.sh` reports how many findings a repo's `.gitleaksignore` suppresses, so they're
-seen again before the repo goes public.
-
-A real secret is never an exception. Rotate it: it's in the branch's history, so a commit that
-removes it doesn't make it safe.
+| [`security/secrets`](security/README.md#secrets) | `security / secrets` | gitleaks scans the pull request's commits against the org's rules and the repo's exceptions; a finding fails the check |
 
 ## What it needs
 
@@ -77,6 +45,6 @@ sha256sum gitleaks_<version>_checksums.txt
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `security / secrets` fails: `leaks found` | A commit in the pull request matches a rule | The job's log names the commit, file and line. Rotate a real secret; for a false positive, make an exception as above |
+| `security / secrets` fails: `leaks found` | A commit in the pull request matches a rule | The job's log names the commit, file and line. Rotate a real secret; for a false positive, make an exception ([security guide](security/README.md#secrets)) |
 | `FAIL: <scanner>_<version>_checksums.txt doesn't match the SHA-256 pinned in ...` | The release's checksums file isn't the one that was pinned: the release was republished, or tampered with | Find out which before changing the pinned hash |
 | `FAIL: <asset> doesn't match <checksums file>` | The download was corrupted or replaced | Re-run; if it persists, treat it as tampering |

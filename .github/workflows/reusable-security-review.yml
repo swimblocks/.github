@@ -1,8 +1,8 @@
 name: reusable-security-review
 
 # The automatic security review for SwimBlocks pull requests (docs/security-review.md). Each
-# job checks one of the org's security rules and reports its own check, `security / <job>`,
-# so each can be required on its own. A repo calls it from its own
+# job checks one rule of the security guide (docs/security/README.md) and reports its own
+# check, `security / <job>`, so each can be required on its own. A repo calls it from its own
 # .github/workflows/security-review.yml, a copy of workflow-templates/security-review.yml;
 # scripts/create-repo.sh commits it to every new repo. A new check is a new job here, and
 # needs no change in any repo.
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  # No secrets in the code: gitleaks scans the pull request's commits against the org's rules
+  # security/secrets: gitleaks scans the pull request's commits against the org's rules
   # (.gitleaks.toml in this repo) and the repo's own exceptions (its .gitleaksignore, and
   # gitleaks:allow comments). Public repos also have GitHub's secret scanning and push
   # protection, which GitHub Free doesn't offer private repos; for those, this is the only

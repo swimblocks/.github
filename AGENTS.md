@@ -67,7 +67,8 @@ For **every** change:
      asked and hands your decision to their collaborators.
 5. **Wait for CI green** (lint + tests) once the PR exists. The automatic readability review
    comments against the [style guide](docs/styleguide/README.md); when asked to address its
-   findings, change the code or reply saying why not, in each thread.
+   findings, change the code or reply saying why not, in each thread. The security review
+   checks the [security guide](docs/security/README.md); fix what it finds.
 6. **Do not self-merge.** Post the PR link and stop. *Exception:* a large mechanical change
    spanning many repos may be agent-opened and agent-merged by prior agreement with the author.
 7. The human reviews and squash-merges.
