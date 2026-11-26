@@ -39,18 +39,30 @@ jobs:
           path: org
           persist-credentials: false
 
+      # A plain assignment, so a failed download (a checksum mismatch, say) fails this step,
+      # where an echo of the command's output would succeed with an empty path.
       - name: Download gitleaks
         id: fetch
-        run: echo "path=$(org/scripts/fetch-scanner.sh gitleaks "$RUNNER_TEMP/gitleaks")" >> "$GITHUB_OUTPUT"
+        run: |
+          path=$(org/scripts/fetch-scanner.sh gitleaks "$RUNNER_TEMP/gitleaks")
+          echo "path=$path" >> "$GITHUB_OUTPUT"
 
+      # --text scans a file even if the repo's .gitattributes marks it binary (-diff), which
+      # would otherwise hide its patch. --diff-merges=first-parent scans each merge against the
+      # branch it was made on, so a secret typed while resolving a conflict is seen; plain
+      # `git log -p` prints no patch for a merge. Findings exit 2, so a scan that couldn't run
+      # (exit 1) isn't reported as a secret.
       - name: Scan the pull request's commits
         env:
           GITLEAKS: ${{ steps.fetch.outputs.path }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          if ! "$GITLEAKS" git repo --log-opts="$BASE..$HEAD" --config org/.gitleaks.toml \
-              --gitleaks-ignore-path repo --no-banner --redact --verbose; then
+          status=0
+          "$GITLEAKS" git repo --log-opts="--text --diff-merges=first-parent $BASE..$HEAD" \
+            --config org/.gitleaks.toml --gitleaks-ignore-path repo \
+            --no-banner --redact --verbose --exit-code 2 || status=$?
+          if [ "$status" -eq 2 ]; then
             {
               echo "### gitleaks found a secret"
               echo
@@ -59,5 +71,7 @@ jobs:
               echo "enough. For a false positive, add its fingerprint to the repo's"
               echo "\`.gitleaksignore\`, or mark the line \`gitleaks:allow\`."
             } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
+          elif [ "$status" -ne 0 ]; then
+            echo "### gitleaks couldn't scan (exit $status); see the job's log" >> "$GITHUB_STEP_SUMMARY"
           fi
+          exit "$status"
