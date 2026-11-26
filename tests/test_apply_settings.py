@@ -410,13 +410,14 @@ class TestVerifyRequiredFiles:
         assert not apply_settings.verify_required_files("o/r", self.FILES, tmp_path)
         assert "could not read: gh: Not Found (HTTP 404)" in capsys.readouterr().out
 
-    def test_settings_lists_the_review_caller(self):
+    def test_settings_lists_the_review_callers(self):
         root = _MODULE_PATH.parents[1]
         settings = apply_settings.load_settings(root / ".github" / "settings.yml")
-        entry = {"path": ".github/workflows/readability-review.yml",
-                 "source": "workflow-templates/readability-review.yml"}
-        assert entry in settings["required_files"]
-        assert (root / entry["source"]).is_file()
+        for name in ("readability-review", "security-review"):
+            entry = {"path": f".github/workflows/{name}.yml",
+                     "source": f"workflow-templates/{name}.yml"}
+            assert entry in settings["required_files"]
+            assert (root / entry["source"]).is_file()
 
 
 class TestSecurity:

@@ -450,6 +450,8 @@ bypass actors, so org owners and repo admins can force-push when genuinely neede
 - Linear history required (squash-only — pairs with the merge-method settings above).
 - The readability review's check, `review / review`, must pass
   ([`docs/readability-review.md`](docs/readability-review.md)).
+- The security review's secrets check, `security / secrets`, must pass
+  ([`docs/security-review.md`](docs/security-review.md)).
 - No force pushes or deletions for non-admins.
 
 **Private repos** fall back to the legacy `branches:` protection block. GitHub Free does not
