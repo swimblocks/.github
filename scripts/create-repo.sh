@@ -72,7 +72,7 @@ add_caller() {
     >/dev/null
 }
 add_caller readability-review "Call the org's readability review"
-add_caller secret-scan "Call the org's secret scan"
+add_caller security-review "Call the org's security review"
 
 echo "==> Applying canonical settings"
 python "$SCRIPT_DIR/apply_settings.py" "$REPO"
@@ -85,5 +85,5 @@ echo "        Python: uses: swimblocks/.github/.github/workflows/reusable-python
 echo "        Go:     uses: swimblocks/.github/.github/workflows/reusable-go-ci.yml@main"
 echo "      (a Go repo starts on the current stable Go release, named by go.mod's go directive),"
 echo "      add a per-repo .github/dependabot.yml, draft an AGENTS.md."
-echo "The readability review's and secret scan's callers are already on the default branch."
+echo "The readability and security reviews' callers are already on the default branch."
 echo "When ready to release publicly: scripts/make-public.sh $REPO"

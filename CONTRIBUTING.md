@@ -374,8 +374,8 @@ golangci-lint too:
 ## Secrets & data
 
 - Never commit secrets (`.env`, credentials, service-account keys) — they're gitignored.
-  Each pull request is scanned for them, and public repos reject a push that carries one
-  ([`docs/secret-scanning.md`](docs/secret-scanning.md)).
+  The security review scans each pull request for them, and public repos reject a push that
+  carries one ([`docs/security-review.md`](docs/security-review.md)).
 - Never commit real personal data (officials' names/emails, club contact lists). Treat any
   such CSV/PDF as local sample data and gitignore it, or scrub before committing.
 

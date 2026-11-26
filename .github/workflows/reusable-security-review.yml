@@ -1,17 +1,11 @@
-name: reusable-secret-scan
+name: reusable-security-review
 
-# Scans each pull request's commits for secrets with gitleaks, against the org's rules
-# (.gitleaks.toml in this repo), and fails on a finding. A repo calls it from its own
-# .github/workflows/secret-scan.yml, a copy of workflow-templates/secret-scan.yml;
-# scripts/create-repo.sh commits it to every new repo.
-#
-# Public repos also have GitHub's secret scanning and push protection (settings.yml), which
-# GitHub Free doesn't offer private repos; for those, this is the only check on new commits.
-# make-public.sh scans a repo's whole history once more, with trufflehog too, before it goes
-# public.
-#
-# A repo makes its own exceptions where they're committed and reviewed: a finding's
-# fingerprint in the repo's .gitleaksignore, or a gitleaks:allow comment on the line.
+# The automatic security review for SwimBlocks pull requests (docs/security-review.md). Each
+# job checks one of the org's security rules and reports its own check, `security / <job>`,
+# so each can be required on its own. A repo calls it from its own
+# .github/workflows/security-review.yml, a copy of workflow-templates/security-review.yml;
+# scripts/create-repo.sh commits it to every new repo. A new check is a new job here, and
+# needs no change in any repo.
 
 on:
   workflow_call:
@@ -20,7 +14,12 @@ permissions:
   contents: read
 
 jobs:
-  gitleaks:
+  # No secrets in the code: gitleaks scans the pull request's commits against the org's rules
+  # (.gitleaks.toml in this repo) and the repo's own exceptions (its .gitleaksignore, and
+  # gitleaks:allow comments). Public repos also have GitHub's secret scanning and push
+  # protection, which GitHub Free doesn't offer private repos; for those, this is the only
+  # check on new commits.
+  secrets:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the pull request
@@ -55,7 +54,7 @@ jobs:
             {
               echo "### gitleaks found a secret"
               echo
-              echo "The log above names each finding's commit, file and line. Rotate a real"
+              echo "The job's log names each finding's commit, file and line. Rotate a real"
               echo "secret: it is in the branch's history, so removing it in a new commit isn't"
               echo "enough. For a false positive, add its fingerprint to the repo's"
               echo "\`.gitleaksignore\`, or mark the line \`gitleaks:allow\`."

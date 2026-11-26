@@ -179,7 +179,7 @@ Reference implementation:
 
 Use [`scripts/create-repo.sh`](scripts/create-repo.sh) — **never** the GitHub UI. It applies
 the canonical settings from [`.github/settings.yml`](.github/settings.yml) automatically,
-commits the readability review's and secret scan's callers as the repo's first commits, and
+commits the readability and security reviews' callers as the repo's first commits, and
 tells you the `ghq get` line to clone it into the standard local layout.
 
 Settings ship as a weekly release: [`release.yml`](.github/workflows/release.yml) publishes a
