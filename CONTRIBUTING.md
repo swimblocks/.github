@@ -249,22 +249,12 @@ reasoning.
 **Automatic readability review.** Each repo calls the shared
 [`reusable-readability-review.yml`](.github/workflows/reusable-readability-review.yml) from its
 own `.github/workflows/readability-review.yml`, separate from `ci.yml` because it runs on
-different events:
-
-```yaml
-name: Readability review
-on:
-  pull_request:
-    types: [opened, ready_for_review, synchronize, reopened]
-permissions:
-  contents: read
-  pull-requests: write   # the summary comment
-  id-token: write        # signing in to Google Cloud and to the Claude GitHub App
-jobs:
-  review:
-    uses: swimblocks/.github/.github/workflows/reusable-readability-review.yml@main
-    secrets: inherit
-```
+different events. That file is a copy of
+[`workflow-templates/readability-review.yml`](workflow-templates/readability-review.yml).
+[`scripts/create-repo.sh`](scripts/create-repo.sh) commits it to every new repo's default branch,
+and GitHub offers it under a repo's **Actions → New workflow**. Add it to an existing repo in
+a pull request of its own: Claude Code Action runs only once the caller is on the default
+branch, so a pull request that adds it alongside other changes fails its review check.
 
 A pull request is reviewed once, when it is opened or marked ready for review, against the style
 guide for the languages it changes. Findings are inline comments from the Claude GitHub App, and
@@ -272,7 +262,8 @@ the review ends with a summary comment saying how many it posted. It runs again 
 only to confirm the review has happened. Drafts, fork pull requests and pull requests from bots
 are skipped. It needs only the Claude GitHub App on the repo: the model token is read from
 Google Cloud over OIDC, and the two secrets that say where to find it are copied into every repo
-by the settings rollout ([`docs/reconciler.md`](docs/reconciler.md)).
+by the settings rollout ([`docs/reconciler.md`](docs/reconciler.md)). What it needs, how to
+operate it and what to do when it fails: [`docs/readability-review.md`](docs/readability-review.md).
 
 Answer every finding: change the code, or reply saying why not, then resolve the thread.
 A finding you reject is as useful as one you accept: the weekly calibration report

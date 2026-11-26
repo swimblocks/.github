@@ -28,6 +28,10 @@ Organization-wide defaults for [SwimBlocks](https://github.com/swimblocks).
   user-local agent pointer files (`~/src/AGENTS.md` etc.) so agents invoked outside any
   specific repo still pick up the canonical rules. See
   [`docs/development.md`](docs/development.md).
+- [`.github/workflows/reusable-readability-review.yml`](.github/workflows/reusable-readability-review.yml)
+  — the automatic readability review, called from each repo's copy of
+  [`workflow-templates/readability-review.yml`](workflow-templates/readability-review.yml).
+  See [`docs/readability-review.md`](docs/readability-review.md).
 - [`docs/development.md`](docs/development.md) — recommended local layout (ghq),
   user-local agent files, and how they relate to per-repo files. Start here when setting up
   a new machine.

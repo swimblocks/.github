@@ -44,6 +44,13 @@ actions_secrets:
   - name: SWIMBLOCKS_CI_WIF_PROVIDER
   - name: SWIMBLOCKS_CI_REVIEW_SECRET
 
+# Files every repo carries, each a copy of a file in this repo. The rollout checks each is on
+# the repo's default branch and matches its source, and never writes one: the reconciler has
+# Contents read, not write (docs/reconciler.md). scripts/create-repo.sh adds them to a new repo.
+required_files:
+  - path: .github/workflows/readability-review.yml
+    source: workflow-templates/readability-review.yml
+
 # Branch protection for public repos is handled via GitHub Rulesets (see `rulesets:` below),
 # which support bypass actors so org owners and repo admins can force-push without extra steps
 # — just `git push origin main --force`. GitHub records the bypass in the audit log.

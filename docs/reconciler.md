@@ -20,7 +20,7 @@ design.
 **`rollout.yml`** checks out a released tag and runs
 [`scripts/apply_settings.py`](../scripts/apply_settings.py) against every repo in the org. The
 script reads `settings.yml` and PATCHes any drift in merge methods, labels, branch protection,
-and rulesets. Because it re-asserts every setting, it is also the drift check: anything changed
+and rulesets, and checks that every repo carries the files it lists. Because it re-asserts every setting, it is also the drift check: anything changed
 through the GitHub UI is put back. It triggers:
 
 - **On any release** — `release: published`, whether cut weekly by `release.yml` or by hand.
@@ -47,7 +47,7 @@ grant belongs on the other's installation:
 
 | App | Used by | Installed on | Permissions | Secrets |
 |---|---|---|---|---|
-| `swimblocks-reconciler` | `rollout.yml` | **All repositories** in the org | Metadata read; Administration read & write; Issues read & write; Custom properties read & write; Secrets read & write | `APP_ID`, `APP_PRIVATE_KEY` |
+| `swimblocks-reconciler` | `rollout.yml` | **All repositories** in the org | Metadata read; Administration read & write; Issues read & write; Custom properties read & write; Secrets read & write; Contents read | `APP_ID`, `APP_PRIVATE_KEY` |
 | `swimblocks-releaser` | `release.yml` | **`swimblocks/.github` only** | Metadata read; Contents read & write | `RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY` |
 
 The reconciler's permissions are what the script's API calls require, one to one:
@@ -59,6 +59,7 @@ The reconciler's permissions are what the script's API calls require, one to one
 | Issues read & write | `POST /repos/{repo}/labels` | creating any label `settings.yml` lists and the repo lacks |
 | Custom properties read & write | `PATCH /repos/{repo}/properties/values` | recording `settings_version` |
 | Secrets read & write | `PUT /repos/{repo}/actions/secrets/{name}`, and listing them | copying `settings.yml`'s `actions_secrets` into every repo, since GitHub Free gives private repos no org secrets (design 0007) |
+| Contents read | `GET /repos/{repo}/contents/{path}` | checking each repo carries `settings.yml`'s `required_files`, unchanged |
 
 That last one is the whole of what the repository-level Custom properties permission grants — one
 endpoint, no read of anything else. The org-level equivalent, `PATCH /orgs/{org}/properties/values`,
@@ -96,6 +97,18 @@ The reconciler's Secrets permission was added for this. An org owner approves th
 permission on the app's installation before the first rollout that needs it; until then, that
 rollout fails each repo at `secret ... set failed (HTTP 403)`.
 
+**Files every repo carries.** `settings.yml`'s `required_files` lists files every repo must have
+on its default branch, each a copy of one in this repo: today the readability review's caller,
+from [`workflow-templates/`](../workflow-templates/readability-review.yml). The rollout reads
+each repo's copy and fails the repo if it is missing or differs from its source, line endings
+aside. It never writes one: that would take Contents write on every repo, which the reconciler
+is kept from (above). [`create-repo.sh`](../scripts/create-repo.sh) commits them to a new
+repo; a repo made another way, or one whose copy has drifted, is fixed by a pull request.
+
+The reconciler's Contents read permission was added for this. An org owner approves it on the
+app's installation before the first rollout that needs it; until then, that rollout fails each
+private repo at `file ... could not read: ... (HTTP 403)` or `(HTTP 404)`.
+
 **`APP_ID` / `RELEASE_APP_ID` hold the app's Client ID** (`Iv23li…`), not the numeric App ID.
 GitHub recommends the Client ID for minting installation tokens and shows it beside the App ID on
 the app's settings page; `create-github-app-token` accepts either in its `app-id` input, so the
@@ -119,6 +132,7 @@ Perform once (or when recreating the app from scratch). Requires org-owner acces
    - **Repository permissions → Issues:** Read & write
    - **Repository permissions → Custom properties:** Read & write
    - **Repository permissions → Secrets:** Read & write
+   - **Repository permissions → Contents:** Read
    - All other permissions: No access
 3. **Create GitHub App.** Note the **Client ID** on the next page (the numeric **App ID** beside
    it also works — see Authentication above).

@@ -8,6 +8,7 @@ credentials.
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 import subprocess
@@ -351,3 +352,68 @@ class TestApplySecrets:
         out = capsys.readouterr().out
         assert "HTTP 403" in out
         assert "s3cret" not in out
+
+
+class TestSameFile:
+    def test_identical_bytes_match(self):
+        assert apply_settings.same_file(b"a\nb\n", b"a\nb\n")
+
+    def test_line_endings_do_not_matter(self):
+        # A Windows checkout's copy of the template has CRLF line endings.
+        assert apply_settings.same_file(b"a\r\nb\r\n", b"a\nb\n")
+
+    def test_different_content_does_not_match(self):
+        assert not apply_settings.same_file(b"a\nb\n", b"a\nc\n")
+
+
+class TestVerifyRequiredFiles:
+    FILES = [{"path": ".github/workflows/x.yml", "source": "templates/x.yml"}]
+
+    def _fake_gh(self, monkeypatch, tmp_path, template, response):
+        """Write *template* as the source; make gh return *response*, or raise it."""
+        (tmp_path / "templates").mkdir()
+        (tmp_path / "templates" / "x.yml").write_bytes(template)
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            if isinstance(response, Exception):
+                raise response
+            return response
+
+        monkeypatch.setattr(apply_settings.subprocess, "run", fake_run)
+        return calls
+
+    def _content(self, data: bytes) -> subprocess.CompletedProcess:
+        # The contents API wraps its base64 in lines, as encodebytes does.
+        b64 = base64.encodebytes(data).decode()
+        return subprocess.CompletedProcess(["gh"], 0, stdout=b64)
+
+    def test_matching_file_passes(self, monkeypatch, tmp_path, capsys):
+        response = self._content(b"on: pr\n")
+        calls = self._fake_gh(monkeypatch, tmp_path, b"on: pr\n", response)
+        assert apply_settings.verify_required_files("o/r", self.FILES, tmp_path)
+        url = "repos/o/r/contents/.github/workflows/x.yml"
+        assert calls[0][:3] == ["gh", "api", url]
+        assert "OK  file '.github/workflows/x.yml'" in capsys.readouterr().out
+
+    def test_changed_file_fails(self, monkeypatch, tmp_path, capsys):
+        response = self._content(b"on: push\n")
+        self._fake_gh(monkeypatch, tmp_path, b"on: pr\n", response)
+        assert not apply_settings.verify_required_files("o/r", self.FILES, tmp_path)
+        assert "differs from templates/x.yml" in capsys.readouterr().out
+
+    def test_missing_file_fails_with_gh_message(self, monkeypatch, tmp_path, capsys):
+        missing = subprocess.CalledProcessError(
+            1, ["gh"], stderr="gh: Not Found (HTTP 404)\n")
+        self._fake_gh(monkeypatch, tmp_path, b"on: pr\n", missing)
+        assert not apply_settings.verify_required_files("o/r", self.FILES, tmp_path)
+        assert "could not read: gh: Not Found (HTTP 404)" in capsys.readouterr().out
+
+    def test_settings_lists_the_review_caller(self):
+        root = _MODULE_PATH.parents[1]
+        settings = apply_settings.load_settings(root / ".github" / "settings.yml")
+        entry = {"path": ".github/workflows/readability-review.yml",
+                 "source": "workflow-templates/readability-review.yml"}
+        assert entry in settings["required_files"]
+        assert (root / entry["source"]).is_file()

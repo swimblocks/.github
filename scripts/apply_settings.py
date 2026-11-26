@@ -22,6 +22,7 @@ usual `gh auth login`.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import shutil
@@ -280,6 +281,47 @@ def verify_secrets(repo: str, names: list[str]) -> bool:
     return ok
 
 
+# ---------------------------------------------------------------------------
+# Required files
+#
+# Every repo carries a copy of each file `required_files:` lists, such as the
+# readability review's caller. The rollout checks that the copy is on the
+# default branch and matches its source in this repo, and reports a FAIL if
+# not. It never writes one: the reconciler has Contents read, not write, as it
+# is installed on every repo (docs/reconciler.md). scripts/create-repo.sh adds
+# them to a new repo.
+# ---------------------------------------------------------------------------
+
+def same_file(got: bytes, want: bytes) -> bool:
+    """Whether two copies of a text file match, whatever their line endings."""
+    return got.replace(b"\r\n", b"\n") == want.replace(b"\r\n", b"\n")
+
+
+def verify_required_files(repo: str, files_block: list[dict], root: Path) -> bool:
+    """Confirm *repo*'s default branch has each listed file, matching its source."""
+    ok = True
+    for entry in files_block:
+        path, source = entry.get("path"), entry.get("source")
+        if not path or not source:
+            continue
+        try:
+            out = subprocess.run(
+                ["gh", "api", f"repos/{repo}/contents/{path}", "--jq", ".content"],
+                check=True, capture_output=True, text=True,
+            ).stdout
+        except subprocess.CalledProcessError as e:
+            # A 404 is the file missing; a 403 is the token lacking Contents read.
+            print(f"  FAIL file '{path}': could not read{gh_error(e)}")
+            ok = False
+            continue
+        if same_file(base64.b64decode(out), (root / source).read_bytes()):
+            print(f"  OK  file '{path}': matches {source}")
+        else:
+            print(f"  FAIL file '{path}': differs from {source}")
+            ok = False
+    return ok
+
+
 # Top-level keys of the branch protection PUT body. Anything not in this set is
 # rejected by the API, so we filter `protection:` in the YAML down to these.
 PROTECTION_KEYS = {
@@ -517,6 +559,7 @@ def main(argv: list[str]) -> int:
     labels_block = settings.get("labels") or []
     secret_vals, secrets_missing = secret_values(
         settings.get("actions_secrets") or [], dict(os.environ))
+    files_block = settings.get("required_files") or []
 
     failures: list[str] = []
     for repo in opts.repos:
@@ -550,6 +593,12 @@ def main(argv: list[str]) -> int:
             if secrets_ok:
                 secrets_ok = verify_secrets(repo, list(secret_vals))
             if not secrets_ok and repo not in failures:
+                failures.append(repo)
+
+        # And files: a private repo's review needs its caller as much as a public one's.
+        if files_block and not verify_required_files(
+                repo, files_block, settings_path.parents[1]):
+            if repo not in failures:
                 failures.append(repo)
 
         is_public = get_repo_visibility(repo) == "public"

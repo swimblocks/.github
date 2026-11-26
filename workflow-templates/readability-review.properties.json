@@ -1,0 +1,4 @@
+{
+  "name": "Readability review",
+  "description": "The SwimBlocks readability review: Claude reviews each pull request once against the org style guide."
+}
