@@ -124,10 +124,11 @@ fi
 
 # Trusting the clone's git config scans it in place, every branch (git log --all), where
 # trufflehog would otherwise re-clone it and see only the checked-out branch. Safe: gh wrote
-# that config, not the repo.
+# that config, not the repo. --fail exits non-zero only on a finding; --fail-on-scan-errors
+# makes a scan that broke partway fail too, rather than pass having seen less than it should.
 echo "  - scanning git history with trufflehog ..."
 if ! "$trufflehog" git "file://$repo_path" --trust-local-git-config \
-    --no-update --fail; then
+    --no-update --fail --fail-on-scan-errors; then
   echo
   echo "FAIL: trufflehog reported findings (above), or couldn't run. Resolve before going public:" >&2
   echo "  scrub or rotate a real secret; for a false positive, mark the line trufflehog:ignore" >&2
