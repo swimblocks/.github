@@ -55,6 +55,9 @@ For **every** change:
    locally before pushing. Before handing off, review your own diff for bugs (in Claude Code,
    `/code-review`) and fix what you find, so the author isn't reading problems a reviewer
    raises minutes after the PR opens.
+   - **Keep PRs small.** One issue can take several PRs. A PR that lands self-contained
+     progress says `Refs #N` and leaves the issue open; the one that finishes it says
+     `Closes #N` ([CONTRIBUTING.md](CONTRIBUTING.md#sizing-a-pr)).
 4. **Hand off for local review — do not open the PR.** Nobody opens a pull request carrying
    work its author hasn't read, and the author hasn't seen yours. Push the branch, post a
    short summary (what changed, why, lint/test results), and stop. The author reviews

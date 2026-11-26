@@ -45,8 +45,10 @@ explicitly overrides it.
    - An agent that is unsure about a decision raises it with the author **here**, not in the
      PR description. A question written into a PR reads as though the author is asking their
      reviewers, which sponsors a question they never asked.
-5. **Open a PR** whose description includes `Closes #<issue-number>` and explains the *why*.
-   A `no-issue` PR has no number to close, and carries the `NO-ISSUE:` trailer instead.
+5. **Open a PR** that explains the *why* and names its issue. A PR that finishes the issue
+   says `Closes #<issue-number>`. One that lands self-contained progress and leaves more to do
+   says `Refs #<issue-number>`, and the issue stays open. A `no-issue` PR has no number to
+   close, and carries the `NO-ISSUE:` trailer instead. See [Sizing a PR](#sizing-a-pr).
 6. **CI must be green** (lint + tests) before merge.
 7. **Hand off for merge.** Agents do **not** self-merge: after CI is green, post the PR link
    and stop.
@@ -56,6 +58,18 @@ explicitly overrides it.
 8. **Review & squash-merge.** The author reviews the PR and squash-merges it themselves, then
    deletes the branch. The squash commit message should carry the meaningful detail, not just
    the PR title.
+
+### Sizing a PR
+
+Keep PRs reasonably sized, and err toward smaller. One issue can take several PRs, each on its
+own branch. Ship a self-contained piece rather than let a branch sprawl. Good places to cut:
+
+- a test harness or fixtures land before the fixes they drive;
+- a module is complete and reviewable before later modules build on it;
+- a design decision is worth review before implementation continues.
+
+Each PR stands on its own: tests pass and `main` works once it merges. The last one closes the
+issue.
 
 ### The `no-issue` exception
 
