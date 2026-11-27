@@ -168,8 +168,8 @@ or a `go.mod`, the reconciler's check asks for that ecosystem's entry.
 
 ### Auto-merge, after #43
 
-Once CI is required, the weekly minor-and-patch pull request and security updates merge
-themselves when green; majors are always merged by a person. Two things stand in the way besides #43, and are decided then:
+Once CI is required, each ecosystem's weekly minor-and-patch pull request merges itself
+when green; majors are always merged by a person. Two things stand in the way besides #43, and are decided then:
 
 - **The required code-owner review.** The ruleset requires an approval from a code owner, which
   Dependabot can't give and `github-actions[bot]` isn't. Either a person approves and auto-merge
