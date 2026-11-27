@@ -254,6 +254,11 @@ on then.
 - **A dependency review,** checking each pull request against the dependency guide as the
   readability and security reviews check theirs. It would catch a pull request that adds a
   `go.mod` without a `gomod` entry when it's opened, rather than at the next rollout.
-- **Licences,** the dependency guide's next rule, in a design of its own. GitHub's
+- **Vulnerability scanning on pull requests**
+  ([#98](https://github.com/swimblocks/.github/issues/98)). Dependabot alerts see a known
+  vulnerability only once it's on the default branch. Checking each pull request against
+  [OSV](https://osv.dev/) would stop one from being merged at all.
+- **Licences** ([#99](https://github.com/swimblocks/.github/issues/99)), the dependency guide's
+  next rule, in a design of its own. GitHub's
   [dependency review action](https://github.com/actions/dependency-review-action) can fail a
   pull request on a disallowed licence.
