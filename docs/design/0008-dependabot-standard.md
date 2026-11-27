@@ -62,9 +62,9 @@ updates. The exception is then in the repo's own file, reviewed like any change.
 
 ### Cooldown
 
-Every entry waits **7 days** after a version is published before proposing it
-(`cooldown: default-days: 7`), whatever the ecosystem and whether the update is a patch, minor
-or major. A repo may set longer, not shorter.
+**We wait 7 days.** Every entry sets `cooldown: default-days: 7`, so Dependabot proposes a
+version only once it has been published for a week. That holds in every ecosystem, and for patch,
+minor and major updates alike. A repo may wait longer, never shorter.
 
 Cooldown is the defence against a compromised release: a malicious version is usually found
 and pulled within hours (chalk and debug in September 2025 in about two; litellm on PyPI in
@@ -87,38 +87,61 @@ tag, whose tag can be moved (tj-actions in March 2025), or a Go module proxy ser
 malicious version. Pinning actions to a commit, as the readability review does, is the defence
 there, and belongs in the [security guide](../security/README.md) rather than this standard.
 
-A repo that also sets a package manager's own age gate, such as uv's `exclude-newer`, keeps
-Dependabot's cooldown at least as long, or Dependabot's lockfile updates fail.
+Dependabot's cooldown covers only Dependabot's pull requests. A person or agent running
+`uv add` or `uv lock --upgrade` still gets whatever was published a minute ago. So we expect
+the package manager's own age gate to wait the same 7 days: every uv project sets
+`exclude-newer = "7 days"` under `[tool.uv]` in its `pyproject.toml`. A repo that sets a
+different value says why in a comment on the line above it. The value may be shorter than
+Dependabot's cooldown, but never longer, because Dependabot would then propose versions uv won't
+install, and its lockfile updates would fail. The reconciler's check (below) fails a repo that
+breaks either rule.
 
-### The rollout checks it
+### The reconciler checks it
 
-The rollout reads each repo's `dependabot.yml` and the file list of its default branch, and fails
-the repo if:
+The reconciler (`rollout.yml`, running `apply_settings.py`) reads each repo's `dependabot.yml`
+and the file list of its default branch, and fails the repo if:
 
 - it has no `dependabot.yml`;
 - an ecosystem and directory from the table above has no entry covering it (`directory`, or a
   matching `directories` glob);
 - an entry isn't weekly, or any of its cooldown days (`default-days`, or a `semver-*-days`
-  that overrides it) is shorter than the org's.
+  that overrides it) is shorter than the org's;
+- a uv project has no `exclude-newer`, sets one longer than the org's cooldown, or sets a value
+  other than the cooldown with no comment on the line above saying why.
 
-It never writes the file: the reconciler has Contents read, not write
-([`docs/reconciler.md`](../reconciler.md)). A failing repo is fixed by a pull request, as a
-missing review caller is. `settings.yml` holds the org's values (the interval and the
+The reconciler fixes settings in place: merge methods, rulesets, labels, and the alerts below.
+It doesn't fix files. It reports a failing repo's `dependabot.yml` or `pyproject.toml`, as it
+reports a missing review caller, and a pull request fixes the repo. Fixing files itself would
+take Contents write on every repo, where today the reconciler's app has only Contents read
+([`docs/reconciler.md`](../reconciler.md)). On GitHub Free, private repos have no ruleset, so
+that grant would let a leaked app key push straight to their `main`. `settings.yml` holds the org's values (the interval and the
 cooldown), so changing them is one change in one place, and the check follows.
 
-### Alerts and security updates in `settings.yml`
+### Alerts and security updates are a security rule
 
-Dependabot alerts (`PUT /repos/{repo}/vulnerability-alerts`) and Dependabot security updates
-(`PUT /repos/{repo}/automated-security-fixes`) are free on every repo, private ones included,
-and are settings rather than `dependabot.yml` keys; security updates need alerts on.
-`settings.yml` turns both on in every repo, and the rollout turns them back on if they're
-turned off.
+Dependabot alerts and Dependabot security updates are free on every repo, private ones included.
+They're repo settings, not `dependabot.yml` keys, and security updates need alerts on. Every
+repo turns both on. That's a new rule in the [security guide](../security/README.md),
+`security/dependencies`, and it's kept the way `security/secrets` is:
+
+| | How |
+|---|---|
+| The security guide states it | A `Dependencies` section: what the two settings do, and that every repo has both on |
+| The reconciler fixes it | `settings.yml` turns both on in every repo (`PUT /repos/{repo}/vulnerability-alerts`, `PUT /repos/{repo}/automated-security-fixes`). Each rollout turns them back on and reads them back |
+| The security review checks it | A new job, `security / dependencies`, fails a pull request in a repo whose alerts are off. It asks the alerts API (`GET /repos/{repo}/dependabot/alerts`), which answers 403 when they're off. That takes the workflow permission `vulnerability-alerts: read`, which the caller has to grant |
+
+The review can't see whether security updates are on, because reading that setting takes admin
+read and a workflow's token can't have it. The reconciler's read-back is the only check there.
+
+The permission has to be granted before the job asks for it. A reusable workflow gets no more
+than its caller grants, and a job that asks for more fails the whole run, `security / secrets`
+included. So every repo's caller grants it first (rollout step 2), and the job lands after.
 
 ### New repos
 
 `scripts/create-repo.sh` commits a starting `dependabot.yml` with the `github-actions` entry,
 which every repo needs once it has the review callers. When the repo gains a `pyproject.toml`
-or a `go.mod`, the check asks for that ecosystem's entry.
+or a `go.mod`, the reconciler's check asks for that ecosystem's entry.
 
 ### Auto-merge, after #43
 
@@ -137,20 +160,27 @@ on then.
 
 ## Rollout
 
-1. `settings.yml` turns on alerts and security updates in every repo. No repo changes.
-2. A pull request in each repo whose `dependabot.yml` is missing or incomplete brings it up to
-   the standard, with the cooldown. Agent-opened and merged, as a mechanical change across
-   repos.
-3. The rollout's check lands once every repo passes it, so it doesn't fail the org on the day
-   it ships.
-4. `create-repo.sh` commits the starting file. `CONTRIBUTING.md` → Dependencies states the
-   standard, and `docs/reconciler.md` the check.
-5. Auto-merge, under #16, once #43 is done.
+1. `settings.yml` turns on alerts and security updates in every repo, and the security guide
+   gains `security/dependencies`. No repo changes.
+2. The security review's caller template grants `vulnerability-alerts: read`. A pull request in
+   each repo copies the new caller, brings its `dependabot.yml` up to the standard with the
+   cooldown, and sets `exclude-newer` in a uv project. Agent-opened and merged, as a mechanical change across repos.
+3. The security review gains `security / dependencies`, once every repo's caller grants the
+   permission.
+4. The reconciler's `dependabot.yml` check lands once every repo passes it, so it doesn't fail
+   the org on the day it ships.
+5. `create-repo.sh` commits the starting file. `CONTRIBUTING.md` → Dependencies states the
+   standard, `docs/reconciler.md` the reconciler's check, and `docs/security-review.md` the new
+   job.
+6. Auto-merge, under #16, once #43 is done.
 
 ## Verification
 
-- The check passes on every repo after step 2, and fails a test repo with an ecosystem left out.
+- The reconciler's check passes on every repo after step 2, and fails a test repo with an
+  ecosystem left out.
 - Alerts and security updates read back as enabled on all twelve repos after a rollout.
+- `security / dependencies` passes on a pull request in a repo with alerts on, and fails one in
+  a test repo with them off.
 - A week after step 2, Dependabot has opened pull requests only for versions older than the
   cooldown.
 
@@ -160,3 +190,5 @@ on then.
   take the clicks.
 - **Ecosystems not in the table** (`docker-compose`, `pre-commit`, Helm) join it when a repo
   first uses one.
+- **Age gates beyond uv,** such as npm's or pnpm's, join the check when a repo's package manager
+  has one. Go modules have none.
