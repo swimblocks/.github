@@ -44,6 +44,10 @@ split:
   rules have IDs `dependencies/<heading>`, as the security guide's do. Later rules about
   dependencies go there too, licences first, in designs of their own.
 
+The style and security guides each have a review that checks pull requests against them. The
+dependency guide will get one too, but not in this design. Until then, `settings.yml` and the
+reconciler enforce it.
+
 The rest of this section is what each guide gains.
 
 ### What every repo's `dependabot.yml` covers
@@ -247,6 +251,9 @@ on then.
   makes the age gate a recommendation rather than something the reconciler checks.
 - **Age gates beyond uv,** such as npm's or pnpm's, join the check when a repo's package manager
   has one. Go modules have none.
+- **A dependency review,** checking each pull request against the dependency guide as the
+  readability and security reviews check theirs. It would catch a pull request that adds a
+  `go.mod` without a `gomod` entry when it's opened, rather than at the next rollout.
 - **Licences,** the dependency guide's next rule, in a design of its own. GitHub's
   [dependency review action](https://github.com/actions/dependency-review-action) can fail a
   pull request on a disallowed licence.
