@@ -29,7 +29,26 @@ checks, so without it untested updates would merge.
 
 ## Design
 
+### Where the rules live
+
+The rules are split across two guides, the way the style guide and the security guide already
+split:
+
+- **The [security guide](../security/README.md) sets the expectation,** as a new rule,
+  `security/dependencies`. Every repo is told about known vulnerabilities in what it depends on
+  and has their fixes proposed. Every repo also waits before taking a newly published version,
+  so a compromised release has time to be found and pulled. The rule says what's expected, and
+  points to the dependency guide for how.
+- **A new dependency guide, `docs/dependencies/README.md`, says how we meet it.** It covers
+  Dependabot's configuration, the cooldown's length, and package managers' own age gates. Its
+  rules have IDs `dependencies/<heading>`, as the security guide's do. Later rules about
+  dependencies go there too, licences first, in designs of their own.
+
+The rest of this section is what each guide gains.
+
 ### What every repo's `dependabot.yml` covers
+
+This section is the dependency guide's `dependencies/dependabot`.
 
 An entry for every ecosystem the repo uses, found from the files in its tree:
 
@@ -84,6 +103,8 @@ updates. The exception is then in the repo's own file, reviewed like any change.
 
 ### Cooldown
 
+This section is the dependency guide's `dependencies/cooldown`.
+
 **We wait 7 days.** Every entry sets `cooldown: default-days: 7`, so Dependabot proposes a
 version only once it has been published for a week. That holds in every ecosystem, and for patch,
 minor and major updates alike. A repo may wait longer, never shorter.
@@ -116,7 +137,8 @@ the package manager's own age gate to wait the same 7 days: every uv project set
 different value says why in a comment on the line above it. The value may be shorter than
 Dependabot's cooldown, but never longer, because Dependabot would then propose versions uv won't
 install, and its lockfile updates would fail. The reconciler's check (below) fails a repo that
-breaks either rule.
+breaks either rule. Whether uv's age gate also blocks security updates is still open (see
+Open items).
 
 ### The reconciler checks it
 
@@ -137,19 +159,22 @@ It doesn't fix files. It reports a failing repo's `dependabot.yml` or `pyproject
 reports a missing review caller, and a pull request fixes the repo. Fixing files itself would
 take Contents write on every repo, where today the reconciler's app has only Contents read
 ([`docs/reconciler.md`](../reconciler.md)). On GitHub Free, private repos have no ruleset, so
-that grant would let a leaked app key push straight to their `main`. `settings.yml` holds the org's values (the interval and the
-cooldown), so changing them is one change in one place, and the check follows.
+that grant would let a leaked app key push straight to their `main`.
 
-### Alerts and security updates are a security rule
+`settings.yml` holds the org's values (the interval and the cooldown), so changing them is one
+change in one place, and the check follows.
 
-Dependabot alerts and Dependabot security updates are free on every repo, private ones included.
-They're repo settings, not `dependabot.yml` keys, and security updates need alerts on. Every
-repo turns both on. That's a new rule in the [security guide](../security/README.md),
-`security/dependencies`, and it's kept the way `security/secrets` is:
+### Alerts and security updates
+
+Dependabot alerts and Dependabot security updates are what meet the first half of
+`security/dependencies`. They're free on every repo, private ones included. They're repo
+settings, not `dependabot.yml` keys, and security updates need alerts on. Every repo turns both
+on, and the rule is kept the way `security/secrets` is:
 
 | | How |
 |---|---|
-| The security guide states it | A `Dependencies` section: what the two settings do, and that every repo has both on |
+| The security guide states it | A `Dependencies` section: every repo is told about known vulnerabilities and has their fixes proposed, and waits before taking a new release. It links the dependency guide for how |
+| The dependency guide implements it | `dependencies/dependabot` and `dependencies/cooldown`, above, and a section on the two settings |
 | The reconciler fixes it | `settings.yml` turns both on in every repo (`PUT /repos/{repo}/vulnerability-alerts`, `PUT /repos/{repo}/automated-security-fixes`). Each rollout turns them back on and reads them back |
 | The security review checks it | A new job, `security / dependencies`, fails a pull request in a repo whose alerts are off. It asks the alerts API (`GET /repos/{repo}/dependabot/alerts`), which answers 403 when they're off. That takes the workflow permission `vulnerability-alerts: read`, which the caller has to grant |
 
@@ -168,8 +193,9 @@ or a `go.mod`, the reconciler's check asks for that ecosystem's entry.
 
 ### Auto-merge, after #43
 
-Once CI is required, each ecosystem's weekly minor-and-patch pull request merges itself
-when green; majors are always merged by a person. Two things stand in the way besides #43, and are decided then:
+Once CI is required, each ecosystem's weekly minor-and-patch pull request merges itself when
+green; majors are always merged by a person. Two things stand in the way besides #43, and are
+decided then:
 
 - **The required code-owner review.** The ruleset requires an approval from a code owner, which
   Dependabot can't give and `github-actions[bot]` isn't. Either a person approves and auto-merge
@@ -183,18 +209,19 @@ on then.
 
 ## Rollout
 
-1. `settings.yml` turns on alerts and security updates in every repo, and the security guide
-   gains `security/dependencies`. No repo changes.
+1. `settings.yml` turns on alerts and security updates in every repo. The security guide gains
+   `security/dependencies`, and the dependency guide is written. No repo changes.
 2. The security review's caller template grants `vulnerability-alerts: read`. A pull request in
    each repo copies the new caller, brings its `dependabot.yml` up to the standard with the
-   cooldown, and sets `exclude-newer` in a uv project. Agent-opened and merged, as a mechanical change across repos.
+   cooldown, and sets `exclude-newer` in a uv project. Agent-opened and merged, as a mechanical
+   change across repos.
 3. The security review gains `security / dependencies`, once every repo's caller grants the
    permission.
 4. The reconciler's `dependabot.yml` check lands once every repo passes it, so it doesn't fail
    the org on the day it ships.
-5. `create-repo.sh` commits the starting file. `CONTRIBUTING.md` → Dependencies states the
-   standard, `docs/reconciler.md` the reconciler's check, and `docs/security-review.md` the new
-   job.
+5. `create-repo.sh` commits the starting file. `CONTRIBUTING.md` → Dependencies and
+   `AGENTS.md` link the dependency guide. `docs/reconciler.md` describes the reconciler's check,
+   and `docs/security-review.md` the new job.
 6. Auto-merge, under #16, once #43 is done.
 
 ## Verification
@@ -211,5 +238,15 @@ on then.
 
 - **Ecosystems not in the table** (`docker-compose`, `pre-commit`, Helm) join it when a repo
   first uses one.
+- **uv's age gate and security updates.** Dependabot's cooldown never delays a security update,
+  but uv applies `exclude-newer` to every lock, Dependabot's included. A security fix published
+  less than 7 days ago may then fail to lock, and its security update with it. Dependabot turns
+  pnpm's and Yarn Berry's age gates off on security updates; nothing says it does for uv's. A
+  test repo settles it before step 2 sets `exclude-newer` anywhere. If the lock fails, the
+  dependency guide either names `exclude-newer-package` as the way to let one fix through, or
+  makes the age gate a recommendation rather than something the reconciler checks.
 - **Age gates beyond uv,** such as npm's or pnpm's, join the check when a repo's package manager
   has one. Go modules have none.
+- **Licences,** the dependency guide's next rule, in a design of its own. GitHub's
+  [dependency review action](https://github.com/actions/dependency-review-action) can fail a
+  pull request on a disallowed licence.
