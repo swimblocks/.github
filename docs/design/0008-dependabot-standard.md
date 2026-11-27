@@ -48,9 +48,31 @@ Each entry has:
 
 - **`schedule.interval: weekly`**, Dependabot's default day, Monday.
 - **The org's cooldown, or a longer one** (below).
-- **No `groups:`.** Each update is its own pull request. A failing update then names itself,
-  and can be reverted on its own. Grouping would mainly save clicks, which auto-merge saves
-  instead, and Dependabot closes a pull request a newer version supersedes.
+- **One group for minor and patch updates.** Each week, an ecosystem's minor and patch updates
+  arrive together as one pull request, and each major update as its own. Minor and patch
+  updates are most of the volume, so grouping them means one CI run and one review per
+  ecosystem each week, not one per dependency. Majors are where breaking changes are, so each
+  stays alone and a person merges it.
+
+  A failing grouped pull request doesn't name the update that broke it, so a person finds it in
+  the CI log. `@dependabot ignore <dependency>` then takes that update out of the group until
+  it's fixed.
+
+  The group applies only to version updates, because a group without `applies-to:
+  security-updates` doesn't touch security updates. So each security fix still arrives alone and
+  immediately.
+
+```yaml
+- package-ecosystem: uv
+  directory: /
+  schedule:
+    interval: weekly
+  cooldown:
+    default-days: 7
+  groups:
+    minor-and-patch:
+      update-types: [minor, patch]
+```
 
 `open-pull-requests-limit` stays at Dependabot's default of five. Security updates have their
 own fixed limit of ten, and aren't affected.
@@ -106,6 +128,7 @@ and the file list of its default branch, and fails the repo if:
   matching `directories` glob);
 - an entry isn't weekly, or any of its cooldown days (`default-days`, or a `semver-*-days`
   that overrides it) is shorter than the org's;
+- an entry has no group that takes its minor and patch updates;
 - a uv project has no `exclude-newer`, sets one longer than the org's cooldown, or sets a value
   other than the cooldown with no comment on the line above saying why.
 
@@ -145,8 +168,8 @@ or a `go.mod`, the reconciler's check asks for that ecosystem's entry.
 
 ### Auto-merge, after #43
 
-Once CI is required, Dependabot's patch and minor updates merge themselves when green; majors
-are always merged by a person. Two things stand in the way besides #43, and are decided then:
+Once CI is required, the weekly minor-and-patch pull request and security updates merge
+themselves when green; majors are always merged by a person. Two things stand in the way besides #43, and are decided then:
 
 - **The required code-owner review.** The ruleset requires an approval from a code owner, which
   Dependabot can't give and `github-actions[bot]` isn't. Either a person approves and auto-merge
@@ -186,8 +209,6 @@ on then.
 
 ## Open items
 
-- **Groups,** if pull request volume or CI time becomes the problem. Not while auto-merge can
-  take the clicks.
 - **Ecosystems not in the table** (`docker-compose`, `pre-commit`, Helm) join it when a repo
   first uses one.
 - **Age gates beyond uv,** such as npm's or pnpm's, join the check when a repo's package manager
